@@ -1,119 +1,150 @@
 const express = require('express');
 const http = require('http');
-const { WebSocketServer } = require('ws');
+const WebSocket = require('ws');
 
-const PORT = process.env.PORT || 3000;
 const app = express();
+const server = http.createServer(app);
+const wss = new WebSocket.Server({ server });
 
-// 🔥 1. GIAO DIỆN HTTP CHỐNG NGỦ ĐÔNG (PING-PONG KEEP ALIVE) 🔥
+const PORT = process.env.PORT || 8080;
+
+// ==============================================================
+// 🧠 CỤC RAM VĨNH CỬU
+// ==============================================================
+let connectedTabs = {}; // Sổ Nam Tào ghi chú Đàn em
+let masterSocket = null; // Ngai vàng của Trạm Mẹ
+
+// ==============================================================
+// 🌐 GIAO DIỆN GIÁM SÁT TRÊN TRÌNH DUYỆT (DASHBOARD)
+// ==============================================================
 app.get('/', (req, res) => {
-    res.status(200).send(`
+    res.send(`
+        <!DOCTYPE html>
         <html>
-            <head><title>HENDY CYBERPUNK SERVER</title></head>
-            <body style="background: #050208; color: #00e5ff; font-family: monospace; text-align: center; padding-top: 15%;">
-                <h1 style="color: #ffcc00; text-shadow: 0 0 10px #ffcc00;">🚀 TỔNG ĐÀI HENDY CYBERPUNK [VIP PRO] 🚀</h1>
-                <h2>Trạng thái: <span style="color: #0f9;">ĐANG HOẠT ĐỘNG ONLINE</span></h2>
-                <p style="color: #c840ff;">Số lượng Đàn Em đang kết nối: ${wss ? wss.clients.size : 0}</p>
-                <div style="margin-top: 30px; font-size: 12px; color: #555;">Cyberpunk Core Engine v2.1 (Memory Fix) - Running on Port ${PORT}</div>
-            </body>
+        <head>
+            <title>TRẠM VŨ TRỤ HENDY</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+                body { background: #050208; color: #00e5ff; font-family: monospace; text-align: center; padding-top: 50px; }
+                .box { border: 2px solid #c840ff; padding: 20px; border-radius: 10px; display: inline-block; box-shadow: 0 0 20px rgba(200,64,255,0.4); background: #0a0410; }
+                h1 { color: #ffcc00; text-shadow: 0 0 10px rgba(255,204,0,0.5); font-size: 24px;}
+                .status { font-size: 20px; font-weight: bold; margin: 15px 0;}
+                .online { color: #00ffcc; text-shadow: 0 0 10px rgba(0,255,204,0.5); }
+                .offline { color: #ff3366; text-shadow: 0 0 10px rgba(255,51,102,0.5); }
+                .count { font-size: 40px; color: #fff; margin: 10px 0; }
+            </style>
+        </head>
+        <body>
+            <div class="box">
+                <h1>🚀 TỔNG ĐÀI HENDY CYBERPUNK 🚀</h1>
+                <div class="status">Trạm Mẹ (Master): <span class="${masterSocket ? 'online' : 'offline'}">${masterSocket ? '🟢 ĐÃ KẾT NỐI' : '🔴 MẤT KẾT NỐI'}</span></div>
+                <div class="status" style="color: #aaa;">Đàn Em Đang Sống:</div>
+                <div class="count">${Object.keys(connectedTabs).length}</div>
+                <div style="color: #555; font-size: 12px; margin-top: 20px;">Trạng thái Server: BẤT TỬ | Port: ${PORT}</div>
+            </div>
+        </body>
         </html>
     `);
 });
 
-const server = http.createServer(app);
-
-// 🔥 2. KHỞI TẠO WEBSOCKET CHỊU TẢI CAO 🔥
-const wss = new WebSocketServer({ server });
-
 // ==============================================================
-// 🧠 CỤC RAM VĨNH CỬU: SỔ NAM TÀO GHI CHÚ ĐÀN EM CHỐNG MẤT TRÍ NHỚ
+// ⚡ XỬ LÝ GIAO TIẾP WEBSOCKET (TRÁI TIM HỆ THỐNG)
 // ==============================================================
-let connectedSlaves = {}; 
-
-// 🔥 3. THUẬT TOÁN DỌN RÁC (HEARTBEAT) - GIẢI PHÓNG RAM 🔥
-const interval = setInterval(() => {
-    wss.clients.forEach((ws) => {
-        if (ws.isAlive === false) {
-            console.log('\x1b[31m[DỌN RÁC]\x1b[0m Đã ngắt kết nối 1 Tab bị treo/đóng.');
-            return ws.terminate();
-        }
-        ws.isAlive = false;
-        ws.ping();
-    });
-}, 30000); // Quét mỗi 30 giây
-
 wss.on('connection', (ws, req) => {
     ws.isAlive = true;
-    ws.on('pong', () => { ws.isAlive = true; }); // Phản hồi nhịp tim
+    ws.on('pong', () => { ws.isAlive = true; });
 
-    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-    console.log(`\x1b[32m[KẾT NỐI MỚI]\x1b[0m Client IP: ${ip} | Tổng mạng lưới: ${wss.clients.size} thiết bị`);
-
-    // Xử lý khi nhận được dữ liệu từ Master hoặc Đàn em
     ws.on('message', (message) => {
         try {
             const data = JSON.parse(message);
-            
-            // Console log màu sắc để Master dễ giám sát lệnh
-            if (data.action && data.action !== 'SYNC_PING_REQUEST' && data.action !== 'SYNC_REGISTER_TAB') {
-                console.log(`\x1b[36m[PHÁT LỆNH]\x1b[0m Lệnh: \x1b[33m${data.action}\x1b[0m | Từ: ${data.sourceId || 'Master'}`);
+            const action = data.action;
+
+            // 1. TRẠM MẸ XƯNG DANH
+            if (action === 'SYNC_REGISTER_MASTER') {
+                masterSocket = ws;
+                console.log('👑 [MASTER] Trạm Mẹ đã lên sóng!');
+                // Gửi ngay danh sách Đàn em hiện có cho Trạm Mẹ
+                ws.send(JSON.stringify({ action: 'SYNC_TAB_LIST', value: Object.values(connectedTabs) }));
+                return;
             }
 
-            // -------------------------------------------------------------
-            // 🧠 CƠ CHẾ NÃO BỘ: LƯU TRỮ VÀ KHÔI PHỤC DỮ LIỆU
-            // -------------------------------------------------------------
-            
-            // 1. Khi Đàn em vào mạng hoặc báo cáo -> Ghi ngay vào Sổ Nam Tào
-            if (data.action === 'SYNC_REGISTER_TAB' || data.action === 'SYNC_PING_RESPONSE') {
+            // 2. ĐÀN EM XƯNG DANH HOẶC BÁO CÁO TÌNH HÌNH
+            if (action === 'SYNC_REGISTER_TAB' || action === 'SYNC_PING_RESPONSE') {
                 if (data.value && data.value.id) {
-                    connectedSlaves[data.value.id] = data.value;
-                    ws.slaveId = data.value.id; // Dán mác cho cổng mạng này để lúc out còn biết mà xóa
+                    connectedTabs[data.value.id] = data.value;
+                    ws.slaveId = data.value.id; // Dán mác cho Đàn em
+                    console.log(`🟢 [SLAVE IN] Đàn em [${data.value.name || ws.slaveId}] vừa báo cáo!`);
                 }
             }
 
-            // 2. Khi Trạm Mẹ (App .exe) vừa kết nối lại -> Bơm ngay cục RAM cho nó
-            if (data.action === 'SYNC_REGISTER_MASTER' || data.action === 'SYNC_REQUEST_TAB_LIST') {
-                ws.send(JSON.stringify({ 
-                    action: 'SYNC_TAB_LIST', 
-                    value: Object.values(connectedSlaves) 
-                }));
+            // 3. KHI TRẠM MẸ CHỦ ĐỘNG BẤM NÚT "CẬP NHẬT" TÌNH HÌNH
+            if (action === 'SYNC_REQUEST_TAB_LIST') {
+                if (masterSocket && masterSocket.readyState === WebSocket.OPEN) {
+                    masterSocket.send(JSON.stringify({ action: 'SYNC_TAB_LIST', value: Object.values(connectedTabs) }));
+                }
+                return; // Không cần phát lệnh này đi tiếp
             }
 
-            // -------------------------------------------------------------
-
-            // Gửi dữ liệu này tới TẤT CẢ các thiết bị khác (Trừ thằng vừa gửi)
+            // 4. PHÁT LỆNH ĐI MUÔN NƠI (Broadcast)
             wss.clients.forEach((client) => {
-                if (client !== ws && client.readyState === 1) { // 1 = OPEN
+                // Không gửi lại cho chính người vừa phát lệnh
+                if (client !== ws && client.readyState === WebSocket.OPEN) {
                     client.send(message.toString());
                 }
             });
+
         } catch (err) {
-            console.error(`\x1b[31m[LỖI DỮ LIỆU]\x1b[0m Phát hiện gói tin không hợp lệ! Bỏ qua chống sập.`);
+            console.error('❌ [CẢNH BÁO] Có kẻ gửi dữ liệu rác, đã chặn!');
         }
     });
 
+    // 5. XỬ LÝ KHI CÓ KẺ RỚT MẠNG HOẶC TẮT TAB
     ws.on('close', () => {
-        console.log(`\x1b[31m[NGẮT KẾT NỐI]\x1b[0m Còn lại: ${wss.clients.size} thiết bị`);
-        // Trí tuệ nhân tạo: Nếu Đàn em tắt Tab/Văng, xóa luôn khỏi Sổ Nam Tào để App Master không bị ảo
-        if (ws.slaveId && connectedSlaves[ws.slaveId]) {
-            delete connectedSlaves[ws.slaveId];
+        if (ws === masterSocket) {
+            console.log('⚠️ [MASTER OUT] Trạm Mẹ đã mất kết nối!');
+            masterSocket = null;
+        } else if (ws.slaveId) {
+            console.log(`🔴 [SLAVE OUT] Đàn em [${ws.slaveId}] đã chết hoặc rớt mạng.`);
+            // Xóa ngay lập tức khỏi sổ Nam Tào
+            delete connectedTabs[ws.slaveId];
+            
+            // TỰ ĐỘNG BÁO CHO TRẠM MẸ ĐỂ TRỪ SỐ TRÊN MÀN HÌNH (Không cần bấm F5)
+            if (masterSocket && masterSocket.readyState === WebSocket.OPEN) {
+                masterSocket.send(JSON.stringify({ action: 'SYNC_TAB_LIST', value: Object.values(connectedTabs) }));
+            }
         }
     });
 });
 
-wss.on('close', () => {
-    clearInterval(interval);
-});
+// ==============================================================
+// 💓 NHỊP TIM BẢO VỆ MẠNG (CHỐNG RAILWAY CẮT ĐIỆN GÂY LỖI 502)
+// ==============================================================
+const interval = setInterval(() => {
+    wss.clients.forEach((ws) => {
+        // Kẻ nào ngưng tim -> Trảm ngay lập tức để giải phóng RAM
+        if (ws.isAlive === false) {
+            if (ws.slaveId) delete connectedTabs[ws.slaveId];
+            return ws.terminate();
+        }
+        // Còn sống thì ép tim
+        ws.isAlive = false;
+        ws.ping();
+    });
+}, 15000); // Rút ngắn xuống 15 giây để bao sống trên mạng yếu
 
-// Khởi động Động cơ
+wss.on('close', () => clearInterval(interval));
+
+// ==============================================================
+// 🚀 KHỞI ĐỘNG ĐỘNG CƠ
+// ==============================================================
 server.listen(PORT, () => {
-    console.log(`\x1b[36m
+    console.log(`
    ██╗  ██╗███████╗███╗   ██╗██████╗ ██╗   ██╗
    ██║  ██║██╔════╝████╗  ██║██╔══██╗╚██╗ ██╔╝
    ███████║█████╗  ██╔██╗ ██║██║  ██║ ╚████╔╝ 
    ██╔══██║██╔══╝  ██║╚██╗██║██║  ██║  ╚██╔╝  
    ██║  ██║███████╗██║ ╚████║██████╔╝   ██║   
    ╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝╚═════╝    ╚═╝   
-    \x1b[0m`);
-    console.log(`\x1b[33m[VIP PRO SERVER]\x1b[0m Động cơ đã nổ tại Port ${PORT}! Hệ thống lưu trữ RAM Đã Bật...`);
+    `);
+    console.log(`🚀 TỔNG ĐÀI HENDY VIP PRO ĐÃ SẴN SÀNG TẠI PORT ${PORT} 🚀`);
 });
