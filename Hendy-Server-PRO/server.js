@@ -14,7 +14,7 @@ app.get('/', (req, res) => {
                 <h1 style="color: #ffcc00; text-shadow: 0 0 10px #ffcc00;">🚀 TỔNG ĐÀI HENDY CYBERPUNK [VIP PRO] 🚀</h1>
                 <h2>Trạng thái: <span style="color: #0f9;">ĐANG HOẠT ĐỘNG ONLINE</span></h2>
                 <p style="color: #c840ff;">Số lượng Đàn Em đang kết nối: ${wss ? wss.clients.size : 0}</p>
-                <div style="margin-top: 30px; font-size: 12px; color: #555;">Cyberpunk Core Engine v2.0 - Running on Port ${PORT}</div>
+                <div style="margin-top: 30px; font-size: 12px; color: #555;">Cyberpunk Core Engine v2.1 (Memory Fix) - Running on Port ${PORT}</div>
             </body>
         </html>
     `);
@@ -24,6 +24,11 @@ const server = http.createServer(app);
 
 // 🔥 2. KHỞI TẠO WEBSOCKET CHỊU TẢI CAO 🔥
 const wss = new WebSocketServer({ server });
+
+// ==============================================================
+// 🧠 CỤC RAM VĨNH CỬU: SỔ NAM TÀO GHI CHÚ ĐÀN EM CHỐNG MẤT TRÍ NHỚ
+// ==============================================================
+let connectedSlaves = {}; 
 
 // 🔥 3. THUẬT TOÁN DỌN RÁC (HEARTBEAT) - GIẢI PHÓNG RAM 🔥
 const interval = setInterval(() => {
@@ -54,6 +59,28 @@ wss.on('connection', (ws, req) => {
                 console.log(`\x1b[36m[PHÁT LỆNH]\x1b[0m Lệnh: \x1b[33m${data.action}\x1b[0m | Từ: ${data.sourceId || 'Master'}`);
             }
 
+            // -------------------------------------------------------------
+            // 🧠 CƠ CHẾ NÃO BỘ: LƯU TRỮ VÀ KHÔI PHỤC DỮ LIỆU
+            // -------------------------------------------------------------
+            
+            // 1. Khi Đàn em vào mạng hoặc báo cáo -> Ghi ngay vào Sổ Nam Tào
+            if (data.action === 'SYNC_REGISTER_TAB' || data.action === 'SYNC_PING_RESPONSE') {
+                if (data.value && data.value.id) {
+                    connectedSlaves[data.value.id] = data.value;
+                    ws.slaveId = data.value.id; // Dán mác cho cổng mạng này để lúc out còn biết mà xóa
+                }
+            }
+
+            // 2. Khi Trạm Mẹ (App .exe) vừa kết nối lại -> Bơm ngay cục RAM cho nó
+            if (data.action === 'SYNC_REGISTER_MASTER' || data.action === 'SYNC_REQUEST_TAB_LIST') {
+                ws.send(JSON.stringify({ 
+                    action: 'SYNC_TAB_LIST', 
+                    value: Object.values(connectedSlaves) 
+                }));
+            }
+
+            // -------------------------------------------------------------
+
             // Gửi dữ liệu này tới TẤT CẢ các thiết bị khác (Trừ thằng vừa gửi)
             wss.clients.forEach((client) => {
                 if (client !== ws && client.readyState === 1) { // 1 = OPEN
@@ -61,12 +88,16 @@ wss.on('connection', (ws, req) => {
                 }
             });
         } catch (err) {
-            console.error(`\x1b[31m[LỖI DỮ LIỆU]\x1b[0m Phát hiện gói tin không hợp lệ!`);
+            console.error(`\x1b[31m[LỖI DỮ LIỆU]\x1b[0m Phát hiện gói tin không hợp lệ! Bỏ qua chống sập.`);
         }
     });
 
     ws.on('close', () => {
         console.log(`\x1b[31m[NGẮT KẾT NỐI]\x1b[0m Còn lại: ${wss.clients.size} thiết bị`);
+        // Trí tuệ nhân tạo: Nếu Đàn em tắt Tab/Văng, xóa luôn khỏi Sổ Nam Tào để App Master không bị ảo
+        if (ws.slaveId && connectedSlaves[ws.slaveId]) {
+            delete connectedSlaves[ws.slaveId];
+        }
     });
 });
 
@@ -84,5 +115,5 @@ server.listen(PORT, () => {
    ██║  ██║███████╗██║ ╚████║██████╔╝   ██║   
    ╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝╚═════╝    ╚═╝   
     \x1b[0m`);
-    console.log(`\x1b[33m[VIP PRO SERVER]\x1b[0m Động cơ đã nổ tại Port ${PORT}! Sẵn sàng đón bão...`);
+    console.log(`\x1b[33m[VIP PRO SERVER]\x1b[0m Động cơ đã nổ tại Port ${PORT}! Hệ thống lưu trữ RAM Đã Bật...`);
 });
