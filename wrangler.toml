@@ -1,0 +1,8 @@
+name = "telegram-mini-app"
+main = "src/index.js"
+compatibility_date = "2026-10-28"
+
+[vars]
+ADMIN_ID = "8639286417"
+MINI_APP_URL = "https://ngogiaidy56-eng.github.io/BOT-TELE"
+CORE_BACKEND_URL = "https://telegram-mini-app.ngogiaidy56.workers.dev"
