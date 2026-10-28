@@ -1,18 +1,15 @@
 {
   "name": "hendy-server-pro",
   "version": "1.0.0",
-  "description": "Telegram Bot running on Cloudflare Workers with Wrangler v4",
+  "description": "Telegram Bot Server running on Cloudflare Workers",
   "main": "src/index.js",
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "types": "wrangler types"
+    "tail": "wrangler tail"
   },
   "devDependencies": {
     "wrangler": "^4.154.0"
-  },
-  "engines": {
-    "node": ">=20.0.0"
   }
 }
