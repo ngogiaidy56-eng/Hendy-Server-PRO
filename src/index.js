@@ -82,6 +82,7 @@ function initUser(chatId, user) {
             history: ["Khởi tạo tài khoản (+50,000 VNĐ)"],
             wonCodes: [],
             linkedAccounts: { SC88: [], C168: [], CM88: [], F8BET: [], ABCVIP: [], KJC_CU: [] },
+            // Đã fix lỗi cú pháp ở đây (thêm mảng [] cho J88)
             accountKho: { RR88: [], MM88: [], GG88: [], U888: [], J88: [], "88CLB": [], ABC8: [], XX8: [], ABCVIP: [], KJC_CU: [] }
         };
     }
@@ -333,7 +334,7 @@ async function handleUpdate(update, env) {
                 ]
             };
         } else if (data === 'compose_web_tma') {
-            subMenuText = `🚀 *COMPOSE WEB & TELEGRAM WEBSDK (TMA)*\n\nĐã khởi tạo *JS Entrypoint* thành công cho Kotlin/Compose Web Target!\n• *Ktor Client:* Đã sẵn sàng kết nối WebSocket & HTTP Gateway.\n• *Telegram WebApp SDK:* Đã bind sự dụng window.Telegram.WebApp.`;
+            subMenuText = `🚀 *COMPOSE WEB & TELEGRAM WEBSDK (TMA)*\n\nĐã khởi tạo *JS Entrypoint* thành công cho Kotlin/Compose Web Target!\n• *Ktor Client:* Đã sẵn sàng kết nối WebSocket & HTTP Gateway.\n• *Telegram WebApp SDK:* Đã bind sử dụng window.Telegram.WebApp.`;
             subMenuKeyboard = {
                 inline_keyboard: [
                     [{ text: '🌐 Mở Compose Web App (TMA)', web_app: { url: MINI_APP_URL } }],
@@ -387,4 +388,4 @@ async function handleUpdate(update, env) {
 
         await callTelegramApi('editMessageText', { chat_id: chatId, message_id: messageId, text: subMenuText, parse_mode: 'Markdown', reply_markup: subMenuKeyboard }, BOT_TOKEN);
     }
-}s
+}
