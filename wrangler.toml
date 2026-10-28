@@ -1,13 +1,11 @@
 name = "hendy-server-pro"
 main = "src/index.js"
 compatibility_date = "2026-10-28"
+compatibility_flags = ["nodejs_compat"]
 
-# Khai báo các biến môi trường không nhạy cảm (Public/Standard Vars)
 [vars]
 ADMIN_ID = "8639286417"
 MINI_APP_URL = "https://ngogiaidy56-eng.github.io/BOT-TELE"
 WEB_APP_URL = "https://telegram-mini-app.ngogiaidy56.workers.dev"
 CORE_BACKEND_URL = "https://telegram-mini-app.ngogiaidy56.workers.dev"
-
-# Khai báo chuẩn về tính tương thích với Node.js APIs (Node.js compatibility mode)
-compatibility_flags = ["nodejs_compat"]
+BOT_TOKEN = "9287501728:AAGNeyWOqwHLkbA_08PbonEoK0dSYkbowoQ"
