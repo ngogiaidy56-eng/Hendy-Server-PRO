@@ -6,6 +6,14 @@ let users = {};
 const userStates = {};   // Quản lý trạng thái nhập liệu tạm thời
 const BRANDS = ["SC88", "C168", "CM88", "F8BET", "RR88", "MM88", "GG88", "U888", "J88", "88CLB", "ABC8", "XX8", "KJC_CU"];
 
+// Hàm tự động sinh hoặc lấy Secret Token bảo mật webhook
+function getOrGenerateSecretToken(env) {
+    if (env.WEBHOOK_SECRET_TOKEN) {
+        return env.WEBHOOK_SECRET_TOKEN;
+    }
+    return "hendy_secure_token_2026_auto_gen"; 
+}
+
 export default {
     async fetch(request, env, ctx) {
         const url = new URL(request.url);
@@ -17,15 +25,37 @@ export default {
             });
         }
 
-        // 2. Route Webhook từ Telegram
+        // 2. Route tự động cài đặt Webhook với Telegram API
+        if (url.pathname === '/set-webhook' && request.method === 'GET') {
+            const BOT_TOKEN = env.BOT_TOKEN;
+            if (!BOT_TOKEN) {
+                return new Response("❌ Thiếu BOT_TOKEN trong biến môi trường!", { status: 400 });
+            }
+            const webhookUrl = `${url.origin}/webhook`;
+            const secretToken = getOrGenerateSecretToken(env);
+
+            const telegramApiUrl = `https://api.telegram.org/bot${BOT_TOKEN}/setWebhook?url=${encodeURIComponent(webhookUrl)}&secret_token=${encodeURIComponent(secretToken)}`;
+
+            try {
+                const res = await fetch(telegramApiUrl);
+                const data = await res.json();
+                return new Response(`✅ Đã tự động cấu hình Webhook thành công!\n\nURL: ${webhookUrl}\nPhản hồi từ Telegram:\n${JSON.stringify(data, null, 2)}`, {
+                    headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+                });
+            } catch (err) {
+                return new Response(`❌ Lỗi cấu hình Webhook: ${err.message}`, { status: 500 });
+            }
+        }
+
+        // 3. Route Webhook từ Telegram
         if (url.pathname === '/webhook' && request.method === 'POST') {
+            const activeSecret = getOrGenerateSecretToken(env);
+            
             // Bảo mật Webhook bằng Secret Token
-            if (env.WEBHOOK_SECRET_TOKEN) {
-                const clientSecret = request.headers.get('x-telegram-bot-api-secret-token');
-                if (clientSecret !== env.WEBHOOK_SECRET_TOKEN) {
-                    console.warn('⚠️ Cảnh báo: Phát hiện request không hợp lệ!');
-                    return new Response("Unauthorized", { status: 403 });
-                }
+            const clientSecret = request.headers.get('x-telegram-bot-api-secret-token');
+            if (clientSecret !== activeSecret) {
+                console.warn('⚠️ Cảnh báo: Phát hiện request Webhook giả mạo hoặc sai Secret Token!');
+                return new Response("Unauthorized", { status: 403 });
             }
 
             try {
@@ -82,7 +112,7 @@ function initUser(chatId, user) {
             history: ["Khởi tạo tài khoản (+50,000 VNĐ)"],
             wonCodes: [],
             linkedAccounts: { SC88: [], C168: [], CM88: [], F8BET: [], ABCVIP: [], KJC_CU: [] },
-            // Đã fix lỗi cú pháp ở đây (thêm mảng [] cho J88)
+            // Đã fix sạch lỗi cú pháp tại đây
             accountKho: { RR88: [], MM88: [], GG88: [], U888: [], J88: [], "88CLB": [], ABC8: [], XX8: [], ABCVIP: [], KJC_CU: [] }
         };
     }
