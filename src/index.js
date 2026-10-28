@@ -1,12 +1,12 @@
 // ==========================================
-// ⚙️ CẤU HÌNH HỆ THỐNG CLOUDFLARE WORKER
+// ⚙️ CẤU HÌNH HỆ THỐNG CLOUDFLARE WORKERS
 // ==========================================
 
 let users = {}; 
 const userStates = {};   // Quản lý trạng thái nhập liệu tạm thời
 const BRANDS = ["SC88", "C168", "CM88", "F8BET", "RR88", "MM88", "GG88", "U888", "J88", "88CLB", "ABC8", "XX8", "KJC_CU"];
 
-// Hàm tự động sinh hoặc lấy Secret Token bảo mật webhook
+// Hàm lấy hoặc tự động tạo Webhook Secret Token
 function getOrGenerateSecretToken(env) {
     if (env.WEBHOOK_SECRET_TOKEN) {
         return env.WEBHOOK_SECRET_TOKEN;
@@ -18,19 +18,16 @@ export default {
     async fetch(request, env, ctx) {
         const url = new URL(request.url);
 
-        // 1. Route trang chủ (Root)
+        // 1. Route trang chủ (Trạng thái hệ thống)
         if (url.pathname === '/' && request.method === 'GET') {
-            return new Response("🤖 Bot Telegram Hendy Cybertech đang chạy trơn tru trên Cloudflare Workers!", {
+            return new Response("🤖 Bot Telegram Hendy Cybertech 2026 đang chạy mượt mà trên Cloudflare Workers!", {
                 headers: { 'Content-Type': 'text/plain; charset=utf-8' }
             });
         }
 
-        // 2. Route tự động cài đặt Webhook với Telegram API
-        if (url.pathname === '/set-webhook' && request.method === 'GET') {
-            const BOT_TOKEN = env.BOT_TOKEN;
-            if (!BOT_TOKEN) {
-                return new Response("❌ Thiếu BOT_TOKEN trong biến môi trường!", { status: 400 });
-            }
+        // 2. Route tự động KÍCH HOẠT & CẤU HÌNH WEBHOOK (Gọi 1 lần sau khi Deploy)
+        if (url.pathname === '/set-webhook' || url.pathname === '/activate') {
+            const BOT_TOKEN = env.BOT_TOKEN || '9287501728:AAGNeyWOqwHLkbA_08PbonEoK0dSYkbowoQ';
             const webhookUrl = `${url.origin}/webhook`;
             const secretToken = getOrGenerateSecretToken(env);
 
@@ -39,46 +36,42 @@ export default {
             try {
                 const res = await fetch(telegramApiUrl);
                 const data = await res.json();
-                return new Response(`✅ ĐÃ TỰ ĐỘNG CẤU HÌNH WEBHOOK THÀNH CÔNG!\n\n🌐 URL: ${webhookUrl}\n🔑 Secret Token: ${secretToken}\n\nPhản hồi từ Telegram:\n${JSON.stringify(data, null, 2)}`, {
+                return new Response(`🚀 KÍCH HOẠT BOT THÀNH CÔNG!\n\n🌐 Webhook URL: ${webhookUrl}\n🔑 Secret Token: ${secretToken}\n\n📲 Phản hồi Telegram API:\n${JSON.stringify(data, null, 2)}`, {
                     headers: { 'Content-Type': 'text/plain; charset=utf-8' }
                 });
             } catch (err) {
-                return new Response(`❌ Lỗi cấu hình Webhook: ${err.message}`, { status: 500 });
+                return new Response(`❌ Lỗi kích hoạt Webhook: ${err.message}`, { status: 500 });
             }
         }
 
-        // 3. Route kiểm tra trạng thái Webhook Info từ Telegram
-        if (url.pathname === '/webhook-info' && request.method === 'GET') {
-            const BOT_TOKEN = env.BOT_TOKEN;
-            try {
-                const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getWebhookInfo`);
-                const data = await res.json();
-                return new Response(JSON.stringify(data, null, 2), {
-                    headers: { 'Content-Type': 'application/json; charset=utf-8' }
-                });
-            } catch (err) {
-                return new Response(`❌ Lỗi truy vấn Webhook Info: ${err.message}`, { status: 500 });
-            }
+        // 3. Route kiểm tra chi tiết trạng thái Webhook từ Telegram
+        if (url.pathname === '/webhook-info') {
+            const BOT_TOKEN = env.BOT_TOKEN || '9287501728:AAGNeyWOqwHLkbA_08PbonEoK0dSYkbowoQ';
+            const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getWebhookInfo`);
+            const data = await res.json();
+            return new Response(JSON.stringify(data, null, 2), {
+                headers: { 'Content-Type': 'application/json; charset=utf-8' }
+            });
         }
 
-        // 4. Route Webhook chính nhận Update từ Telegram
+        // 4. Route nhận tín hiệu Webhook từ Telegram
         if (url.pathname === '/webhook' && request.method === 'POST') {
             const activeSecret = getOrGenerateSecretToken(env);
-            
-            // Bảo mật Webhook bằng Secret Token
             const clientSecret = request.headers.get('x-telegram-bot-api-secret-token');
+
+            // Kiểm tra bảo mật Request
             if (clientSecret !== activeSecret) {
-                console.warn('⚠️ Cảnh báo: Phát hiện request Webhook giả mạo hoặc sai Secret Token!');
+                console.warn('⚠️ Cảnh báo: Phát hiện request Webhook không hợp lệ!');
                 return new Response("Unauthorized", { status: 403 });
             }
 
             try {
                 const update = await request.json();
-                // Xử lý bất đồng bộ, không block response trả về Telegram
+                // Xử lý bất đồng bộ trong background (không block HTTP response 200)
                 ctx.waitUntil(handleUpdate(update, env));
                 return new Response("OK", { status: 200 });
             } catch (e) {
-                console.error("Lỗi xử lý:", e);
+                console.error("Lỗi xử lý Update:", e);
                 return new Response("Lỗi xử lý", { status: 500 });
             }
         }
@@ -88,11 +81,11 @@ export default {
 };
 
 // ==========================================
-// 5. HÀM GIAO TIẾP VỚI TELEGRAM API & KTOR CLIENT
+// 2. HÀM GIAO TIẾP VỚI TELEGRAM API & KTOR CLIENT
 // ==========================================
 async function callTelegramApi(method, payload, botToken) {
-    const apiurl = `https://api.telegram.org/bot${botToken}/${method}`;
-    return fetch(apiurl, {
+    const url = `https://api.telegram.org/bot${botToken}/${method}`;
+    return fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -126,7 +119,7 @@ function initUser(chatId, user) {
             history: ["Khởi tạo tài khoản (+50,000 VNĐ)"],
             wonCodes: [],
             linkedAccounts: { SC88: [], C168: [], CM88: [], F8BET: [], ABCVIP: [], KJC_CU: [] },
-            // Đã fix sạch lỗi cú pháp cú J88 / 88CLB
+            // Đã sửa hoàn toàn lỗi cú pháp tại mảng J88 và 88CLB
             accountKho: { RR88: [], MM88: [], GG88: [], U888: [], J88: [], "88CLB": [], ABC8: [], XX8: [], ABCVIP: [], KJC_CU: [] }
         };
     }
@@ -134,7 +127,7 @@ function initUser(chatId, user) {
 }
 
 // ==========================================
-// 6. HÀM TẠO GIAO DIỆN MENU CHÍNH
+// 3. HÀM TẠO GIAO DIỆN MENU CHÍNH
 // ==========================================
 function getMainMenuKeyboard() {
     return {
@@ -152,14 +145,14 @@ function getMainMenuKeyboard() {
 }
 
 // ==========================================
-// 7. LOGIC XỬ LÝ TOÀN BỘ CẬP NHẬT (UPDATE)
+// 4. LOGIC XỬ LÝ TOÀN BỘ CẬP NHẬT (UPDATE)
 // ==========================================
 async function handleUpdate(update, env) {
-    const BOT_TOKEN = env.BOT_TOKEN;
+    const BOT_TOKEN = env.BOT_TOKEN || '9287501728:AAGNeyWOqwHLkbA_08PbonEoK0dSYkbowoQ';
     const ADMIN_ID = env.ADMIN_ID || '8639286417';
     const MINI_APP_URL = env.MINI_APP_URL || 'https://ngogiaidy56-eng.github.io/BOT-TELE';
-    const WEB_APP_URL = env.WEB_APP_URL || env.CORE_BACKEND_URL;
-    const CORE_BACKEND_URL = env.CORE_BACKEND_URL;
+    const CORE_BACKEND_URL = env.CORE_BACKEND_URL || 'https://telegram-mini-app.ngogiaidy56.workers.dev';
+    const WEB_APP_URL = env.WEB_APP_URL || CORE_BACKEND_URL;
 
     // A. XỬ LÝ TIN NHẮN VĂN BẢN
     if (update.message && update.message.text) {
