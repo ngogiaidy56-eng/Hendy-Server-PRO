@@ -270,7 +270,8 @@ export default {
           return json({ ok: false, ready: false, missing: [
             ...(!env.DB ? ["DB"] : []),
             ...(!env.BOT_TOKEN ? ["BOT_TOKEN"] : []),
-            ...(!env.WEBHOOK_SECRET_TOKEN ? ["WEBHOOK_SECRET_TOKEN"] : [])
+            ...(!env.WEBHOOK_SECRET_TOKEN ? ["WEBHOOK_SECRET_TOKEN"] : []),
+            ...(!env.WEBHOOK_SETUP_KEY ? ["WEBHOOK_SETUP_KEY"] : [])
           ] }, 503);
         }
         try {
