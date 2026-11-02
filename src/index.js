@@ -266,18 +266,36 @@ export default {
         return json({ ok: true, service: "hendy-server-pro", version: "2.0.0", timestamp: new Date().toISOString() });
       }
       if (url.pathname === "/ready" && request.method === "GET") {
-        if (!env.DB || !env.BOT_TOKEN || !env.WEBHOOK_SECRET_TOKEN) {
-          return json({ ok: false, ready: false, missing: [
-            ...(!env.DB ? ["DB"] : []),
-            ...(!env.BOT_TOKEN ? ["BOT_TOKEN"] : []),
-            ...(!env.WEBHOOK_SECRET_TOKEN ? ["WEBHOOK_SECRET_TOKEN"] : []),
-            ...(!env.WEBHOOK_SETUP_KEY ? ["WEBHOOK_SETUP_KEY"] : [])
-          ] }, 503);
+        const missing = [
+          ...(!env.DB ? ["DB"] : []),
+          ...(!env.BOT_TOKEN ? ["BOT_TOKEN"] : []),
+          ...(!env.WEBHOOK_SECRET_TOKEN ? ["WEBHOOK_SECRET_TOKEN"] : []),
+          ...(!env.WEBHOOK_SETUP_KEY ? ["WEBHOOK_SETUP_KEY"] : [])
+        ];
+        if (missing.length) {
+          return json({ ok: false, ready: false, missing }, 503);
         }
         try {
-          await env.DB.prepare("SELECT 1 AS ready").first();
-          return json({ ok: true, ready: true });
-        } catch {
+          const result = await env.DB.prepare(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('users', 'wallets', 'wallet_transactions', 'webhook_updates', 'user_sessions', 'video_jobs', 'payment_requests', 'system_settings', 'audit_logs')"
+          ).all();
+          const present = new Set((result.results || []).map((row) => row.name));
+          const requiredTables = [
+            "users", "wallets", "wallet_transactions", "webhook_updates",
+            "user_sessions", "video_jobs", "payment_requests", "system_settings", "audit_logs"
+          ];
+          const missingTables = requiredTables.filter((table) => !present.has(table));
+          if (missingTables.length) {
+            return json({
+              ok: false,
+              ready: false,
+              error: "database_migrations_pending",
+              missing_tables: missingTables
+            }, 503);
+          }
+          return json({ ok: true, ready: true, database: "connected", schema: "migrated" });
+        } catch (error) {
+          console.error("Readiness database check failed:", error?.message || "unknown error");
           return json({ ok: false, ready: false, error: "database_unavailable" }, 503);
         }
       }
