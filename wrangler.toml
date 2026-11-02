@@ -1,6 +1,6 @@
 name = "hendy-server-pro"
 main = "src/index.js"
-compatibility_date = "2026-11-03"
+compatibility_date = "2026-10-28"
 compatibility_flags = ["nodejs_compat"]
 workers_dev = true
 
