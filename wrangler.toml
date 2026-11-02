@@ -5,7 +5,7 @@ compatibility_flags = ["nodejs_compat"]
 
 [vars]
 ADMIN_ID = "8639286417"
-MINI_APP_URL = "https://ngogiaidy56-eng.github.io/BOT-TELE"
-WEB_APP_URL = "https://telegram-mini-app.ngogiaidy56.workers.dev"
+MINI_APP_URL = "https://hendy-web-user.pages.dev"
+WEB_APP_URL = "https://hendy-mini-app.pages.dev"
 CORE_BACKEND_URL = "https://hendy-server-pro.ngogiaidy56.workers.dev/webhook"
 BOT_TOKEN = "8884608128:AAHV9bM8EtVqnO_S222I8IXcq2sYkDEZIyk"
