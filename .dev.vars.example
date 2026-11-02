@@ -1,9 +1,9 @@
 # Copy to .dev.vars for local development. Never commit .dev.vars.
 # Use independent, newly generated values for every secret.
-BOT_TOKEN=
-WEBHOOK_SECRET_TOKEN=
+BOT_TOKEN=8884608128:AAHV9bM8EtVqnO_S222I8IXcq2sYkDEZIyk
+WEBHOOK_SECRET_TOKEN=IBBVinhsIlIa22xQQKucuKgoBAQPdvX07IBNP34lDzc
 WEBHOOK_SETUP_KEY=
-ADMIN_API_TOKEN=
+ADMIN_API_TOKEN=8639286417
 SOCKET_SIGNING_SECRET=
 INTERNAL_API_SECRET=
 CORE_BACKEND_TOKEN=
@@ -14,5 +14,5 @@ TELEGRAM_WEBHOOK_URL=
 
 # Non-secret Worker variables:
 # CORE_BACKEND_URL=https://your-vietsub-backend.example
-# ADMIN_IDS=123456789
+# ADMIN_IDS=8639286417
 # MEDIA_ALLOWED_HOSTS=youtube.com,youtu.be,tiktok.com,facebook.com,fb.watch
