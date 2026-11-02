@@ -59,6 +59,7 @@ Run these commands after authenticating with `npx wrangler login`:
 ```bash
 npx wrangler d1 create hendy-server-pro-db
 npx wrangler queues create hendy-server-pro-jobs
+# Optional: the configured consumer creates this DLQ automatically if it does not exist.
 npx wrangler r2 bucket create hendy-server-pro-assets
 ```
 

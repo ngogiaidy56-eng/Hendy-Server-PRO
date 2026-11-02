@@ -11,7 +11,8 @@ export async function claimWebhookUpdate(db, updateId) {
        status = 'processing',
        attempts = webhook_updates.attempts + 1,
        error = NULL
-     WHERE webhook_updates.status = 'failed'`
+     WHERE webhook_updates.status = 'failed'
+        OR (webhook_updates.status = 'processing' AND webhook_updates.received_at < datetime('now', '-5 minutes'))`
   ).bind(updateId).run();
   return Number(result?.meta?.changes ?? 0) > 0;
 }
@@ -142,4 +143,10 @@ export async function writeAuditLog(db, id, actorId, action, target, details = {
   await db.prepare(
     "INSERT INTO audit_logs (id, actor_id, action, target, details_json) VALUES (?, ?, ?, ?, ?)"
   ).bind(id, String(actorId), action, target || null, JSON.stringify(details)).run();
+}
+
+export async function getVideoJob(db, jobId) {
+  return db.prepare(
+    "SELECT id, telegram_id, source_url, status, progress FROM video_jobs WHERE id = ?"
+  ).bind(String(jobId)).first();
 }
