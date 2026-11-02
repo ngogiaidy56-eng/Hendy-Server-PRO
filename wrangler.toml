@@ -17,7 +17,7 @@ binding = "DB"
 database_name = "hendy-server-pro-db"
 # Replace this zero UUID with the database_id returned by:
 # npx wrangler d1 create hendy-server-pro-db
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "e4c36ee9-97fe-4d2a-a837-9147fe423d77"
 migrations_dir = "migrations"
 
 [[durable_objects.bindings]]
