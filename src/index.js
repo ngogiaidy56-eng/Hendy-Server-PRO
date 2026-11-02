@@ -11,7 +11,7 @@ import {
 import { BotSocket } from "./durable-objects/BotSocket.js";
 import { constantTimeEqual, createSocketTicket, isBearerAuthorized, isValidTelegramSecret } from "./security.js";
 import { callTelegram } from "./telegram.js";
-import { parseJsonObject } from "./validation.js";
+import { parseJsonObject, resolveTelegramWebhookUrl } from "./validation.js";
 
 const json = (data, status = 200, headers = {}) => Response.json(data, {
   status,
@@ -45,28 +45,58 @@ async function activateWebhook(request, env, url) {
     return json({ ok: false, error: "telegram_secrets_not_configured" }, 503);
   }
 
-  // Always derive the webhook from the host that received this authenticated request.
-  // A stale TELEGRAM_WEBHOOK_URL dashboard variable cannot redirect to an old Worker.
-  const webhookUrl = `${url.origin}/webhook`;
+  let target;
   try {
+    target = resolveTelegramWebhookUrl(url.origin, env.TELEGRAM_WEBHOOK_URL);
+  } catch (error) {
+    return json({
+      ok: false,
+      error: "invalid_telegram_webhook_url",
+      message: error.message
+    }, 400);
+  }
+
+  try {
+    // Verify BOT_TOKEN with Telegram before changing the existing webhook.
     const bot = await callTelegram(env, "getMe");
     const botIdentity = {
       id: bot.result?.id || null,
       username: bot.result?.username || null,
       first_name: bot.result?.first_name || null
     };
-    const result = await callTelegram(env, "setWebhook", {
-      url: webhookUrl,
+
+    // Only register the webhook after getMe has confirmed the bot token.
+    const setResult = await callTelegram(env, "setWebhook", {
+      url: target.url,
       secret_token: env.WEBHOOK_SECRET_TOKEN,
       allowed_updates: ["message", "callback_query"],
       drop_pending_updates: false
     });
+
+    // Ask Telegram for the authoritative URL so a successful API response
+    // is not mistaken for a verified webhook configuration.
+    const infoResult = await callTelegram(env, "getWebhookInfo");
+    const actualUrl = String(infoResult.result?.url || "");
+    const verified = actualUrl.replace(/\/+$/, "") === target.url.replace(/\/+$/, "");
+
     return json({
-      ok: true,
-      webhookUrl,
+      ok: Boolean(setResult.ok && verified),
       bot: botIdentity,
-      telegram: { ok: result.ok, description: result.description || "Webhook configured" }
-    });
+      webhook: {
+        url: target.url,
+        source: target.source,
+        configured: Boolean(setResult.ok),
+        verified,
+        pending_update_count: Number(infoResult.result?.pending_update_count || 0),
+        last_error_date: infoResult.result?.last_error_date || null,
+        last_error_message: infoResult.result?.last_error_message || null
+      },
+      telegram: {
+        ok: Boolean(setResult.ok),
+        description: setResult.description || "Webhook configured"
+      },
+      ...(!verified ? { error: "webhook_verification_mismatch", actualWebhookUrl: actualUrl || null } : {})
+    }, verified ? 200 : 502);
   } catch (error) {
     console.error("Telegram webhook activation failed:", error?.message || "unknown error");
     return json({

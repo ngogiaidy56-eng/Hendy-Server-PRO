@@ -109,7 +109,12 @@ Local testing also needs a local D1 binding and Queue configuration. Use `wrangl
 
 ## 6. Activate Telegram webhook
 
-The webhook URL is derived from the Worker hostname receiving the authenticated activation request, so a stale `TELEGRAM_WEBHOOK_URL` environment variable cannot redirect it to an older Worker.
+Webhook URL selection is automatic and supports an optional override:
+
+- If `TELEGRAM_WEBHOOK_URL` is configured, it intentionally overrides the incoming Worker hostname. It must be an absolute HTTPS URL with no credentials, query string, or fragment. Use either the domain root (the code appends `/webhook`) or a URL already ending in `/webhook`.
+- If `TELEGRAM_WEBHOOK_URL` is empty or absent, the Worker derives `https://<current-worker-host>/webhook` from the authenticated activation request.
+
+Activation calls Telegram `getMe` first to validate `BOT_TOKEN`, then `setWebhook`, and finally `getWebhookInfo` to confirm the registered URL. The response includes the bot username and webhook status but never returns a bot token or webhook secret.
 
 On Windows PowerShell, run:
 

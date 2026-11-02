@@ -1,7 +1,6 @@
 $ErrorActionPreference = "Stop"
 
 $workerBase = "https://hendy-server-pro.ngogiaidy56.workers.dev"
-$expectedWebhook = "$workerBase/webhook"
 
 $secureKey = Read-Host "Enter WEBHOOK_SETUP_KEY (input hidden)" -AsSecureString
 $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureKey)
@@ -26,7 +25,12 @@ try {
     if ($activation.bot.username) {
         Write-Host "Bot: @$($activation.bot.username)"
     }
-    Write-Host "Configured URL: $($activation.webhookUrl)"
+    $expectedWebhook = [string]$activation.webhook.url
+    if ([string]::IsNullOrWhiteSpace($expectedWebhook)) {
+        throw "Activation response did not include the configured webhook URL."
+    }
+    Write-Host "Configured URL: $expectedWebhook"
+    Write-Host "URL source: $($activation.webhook.source)"
 
     Write-Host "Verifying webhook with Telegram..." -ForegroundColor Cyan
     $info = Invoke-RestMethod -Method Get -Uri "$workerBase/webhook-info" -Headers $headers -TimeoutSec 30
@@ -38,6 +42,9 @@ try {
     $actualWebhook = [string]$info.webhook.url
     if ($actualWebhook.TrimEnd("/") -ne $expectedWebhook.TrimEnd("/")) {
         throw "Webhook URL mismatch. Expected $expectedWebhook but Telegram reports $actualWebhook"
+    }
+    if (-not $activation.webhook.verified) {
+        throw "Activation endpoint could not verify the webhook URL returned by Telegram."
     }
 
     Write-Host "Webhook URL is correct." -ForegroundColor Green
