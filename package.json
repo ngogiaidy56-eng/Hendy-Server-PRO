@@ -14,7 +14,7 @@
     "env:generate": "node scripts/env-manager.mjs generate",
     "env:check": "node scripts/env-manager.mjs check",
     "env:verify": "node scripts/env-manager.mjs verify-webhook",
-    "lint": "node --check src/index.js && node --check src/bot.js && node --check src/db.js && node --check src/security.js && node --check src/telegram.js && node --check src/core/router.js && node --check src/core/bot-dispatcher.js && node --check src/durable-objects/BotSocket.js && node --check scripts/secret-sync-utils.mjs && node --check scripts/sync-secrets-and-activate.mjs && node --check scripts/env-manager-utils.mjs && node --check scripts/env-manager.mjs",
+    "lint": "node --check src/index.js && node --check src/bot.js && node --check src/db.js && node --check src/security.js && node --check src/telegram.js && node --check src/core/router.js && node --check src/core/bot-dispatcher.js && node --check src/core/logger.js && node --check src/durable-objects/BotSocket.js && node --check scripts/secret-sync-utils.mjs && node --check scripts/sync-secrets-and-activate.mjs && node --check scripts/env-manager-utils.mjs && node --check scripts/env-manager.mjs",
     "test": "node --test",
     "check": "npm run lint && npm test",
     "db:migrate:local": "wrangler d1 migrations apply hendy-server-pro-db --local",

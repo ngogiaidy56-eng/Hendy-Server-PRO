@@ -204,14 +204,17 @@ export class BotDispatcher {
       for (const entry of this.callbackPatterns) {
         if (entry.matcher(data)) {
           matched = true;
+          console.log(`[BotDispatcher] 🎯 Callback "${data}" from user ${telegramId} matched pattern: "${entry.pattern}"`);
           try {
             if (entry.adminOnly && !userIsAdmin) {
+              console.warn(`[BotDispatcher] ⛔ Callback "${data}" blocked: user ${telegramId} is not admin.`);
               await safeEditOrSend(env, chatId, messageId, "⛔ Bạn không có quyền thực hiện hành động này.", {
                 inline_keyboard: [[{ text: "🔙 Menu chính", callback_data: "menu:home" }]]
               });
               return;
             }
-            return await entry.handler({
+            const startTime = Date.now();
+            const res = await entry.handler({
               query,
               message,
               messageId,
@@ -223,8 +226,10 @@ export class BotDispatcher {
               userIsAdmin,
               helpers
             });
+            console.log(`[BotDispatcher] ✅ Callback "${data}" completed in ${Date.now() - startTime}ms`);
+            return res;
           } catch (err) {
-            console.error(`Callback error for pattern ${entry.pattern}:`, err?.message || err);
+            console.error(`[BotDispatcher] ❌ Callback error for pattern "${entry.pattern}":`, err?.message || err);
             await safeEditOrSend(env, chatId, messageId, `❌ Lỗi xử lý tác vụ: ${err?.message || "Không xác định"}. Vui lòng thử lại:`, await mainKeyboard(env, db, telegramId)).catch(() => {});
             return;
           }
@@ -233,7 +238,7 @@ export class BotDispatcher {
 
       // If callback data did not match any registered pattern
       if (!matched) {
-        console.warn("Unmatched callback query data received:", data);
+        console.warn(`[BotDispatcher] ⚠️ UNMATCHED callback query: "${data}". Registered patterns: [${this.callbackPatterns.map((p) => p.pattern).join(", ")}]`);
         await safeEditOrSend(
           env,
           chatId,

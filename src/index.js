@@ -20,6 +20,7 @@ import { constantTimeEqual, createSocketTicket, isBearerAuthorized, isValidTeleg
 import { callTelegram } from "./telegram.js";
 import { parseJsonObject, resolveTelegramWebhookUrl } from "./validation.js";
 import { Router } from "./core/router.js";
+import { getRecentWebhookTraces, summarizeTelegramUpdate, webhookLogger } from "./core/logger.js";
 
 const json = (data, status = 200, headers = {}) => Response.json(data, {
   status,
@@ -102,33 +103,66 @@ router.get("/ready", async ({ env }) => {
 // --- 2. TELEGRAM WEBHOOK INGESTION & SETUP ---
 
 router.post("/webhook", async ({ request, env }) => {
+  const startTime = Date.now();
   if (!env.BOT_TOKEN || !isValidTelegramSecret(env.WEBHOOK_SECRET_TOKEN)) {
+    webhookLogger.rejected("telegram_secrets_not_configured");
     return json({ ok: false, error: "webhook_not_configured" }, 503);
   }
   const suppliedSecret = request.headers.get("x-telegram-bot-api-secret-token") || "";
   if (!suppliedSecret || !constantTimeEqual(suppliedSecret, env.WEBHOOK_SECRET_TOKEN)) {
+    webhookLogger.rejected("unauthorized_secret_header", {
+      headerReceived: Boolean(suppliedSecret),
+      suppliedLength: suppliedSecret.length,
+      expectedLength: env.WEBHOOK_SECRET_TOKEN?.length || 0
+    });
     return json({ ok: false, error: "unauthorized" }, 401);
   }
   const contentLength = Number(request.headers.get("content-length") || 0);
-  if (contentLength > 1024 * 1024) return json({ ok: false, error: "payload_too_large" }, 413);
+  if (contentLength > 1024 * 1024) {
+    webhookLogger.rejected("payload_too_large", { contentLength });
+    return json({ ok: false, error: "payload_too_large" }, 413);
+  }
 
   let update;
-  try { update = await request.json(); } catch { return json({ ok: false, error: "invalid_json" }, 400); }
-  if (!Number.isSafeInteger(update?.update_id)) return json({ ok: false, error: "invalid_update_id" }, 400);
+  try {
+    update = await request.json();
+  } catch (err) {
+    webhookLogger.rejected("invalid_json", { error: err.message });
+    return json({ ok: false, error: "invalid_json" }, 400);
+  }
+
+  if (!Number.isSafeInteger(update?.update_id)) {
+    webhookLogger.rejected("invalid_update_id", { update });
+    return json({ ok: false, error: "invalid_update_id" }, 400);
+  }
+
+  const summary = summarizeTelegramUpdate(update);
+  webhookLogger.incoming(summary, { contentLength });
 
   let db;
-  try { db = requireDatabase(env); } catch { return json({ ok: false, error: "database_not_configured" }, 503); }
+  try {
+    db = requireDatabase(env);
+  } catch (err) {
+    webhookLogger.error(summary, err, Date.now() - startTime);
+    return json({ ok: false, error: "database_not_configured" }, 503);
+  }
 
   const claimed = await claimWebhookUpdate(db, update.update_id);
-  if (!claimed) return json({ ok: true, duplicate: true });
+  if (!claimed) {
+    webhookLogger.rejected("duplicate_update_ignored", { updateId: update.update_id });
+    return json({ ok: true, duplicate: true });
+  }
 
   try {
     await handleTelegramUpdate(update, env, db);
     await finishWebhookUpdate(db, update.update_id);
+    const duration = Date.now() - startTime;
+    webhookLogger.success(summary, duration);
     return json({ ok: true });
   } catch (error) {
+    const duration = Date.now() - startTime;
     await finishWebhookUpdate(db, update.update_id, error?.message || "update_failed");
-    console.error("Telegram update failed:", error?.message || "unknown error");
+    webhookLogger.error(summary, error, duration);
     return json({ ok: false, error: "update_processing_failed" }, 500);
   }
 });
@@ -410,6 +444,13 @@ router.get("/api/admin/audit-logs", async ({ request, env }) => {
   const db = requireDatabase(env);
   const logs = await listRecentAuditLogs(db, 50);
   return json({ ok: true, logs });
+});
+
+router.get("/api/admin/webhook-logs", async ({ request, env, url }) => {
+  if (!adminAuthorized(request, env)) return json({ ok: false, error: "unauthorized" }, 401);
+  const limit = Math.max(1, Math.min(100, Number(url.searchParams.get("limit") || 50)));
+  const traces = getRecentWebhookTraces(limit);
+  return json({ ok: true, count: traces.length, traces });
 });
 
 router.post("/api/admin/socket-ticket", async ({ request, env }) => {
