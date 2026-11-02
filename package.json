@@ -12,7 +12,8 @@
     "test": "node --test",
     "check": "npm run lint && npm test",
     "db:migrate:local": "wrangler d1 migrations apply hendy-server-pro-db --local",
-    "db:migrate:remote": "wrangler d1 migrations apply hendy-server-pro-db --remote"
+    "db:migrate:remote": "wrangler d1 migrations apply hendy-server-pro-db --remote",
+    "deploy:cloudflare": "wrangler d1 migrations apply hendy-server-pro-db --remote && wrangler deploy"
   },
   "devDependencies": {
     "wrangler": "^4.154.0"
