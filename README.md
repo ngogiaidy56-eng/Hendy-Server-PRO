@@ -66,11 +66,19 @@ npx wrangler r2 bucket create hendy-server-pro-assets
 
 Copy the D1 `database_id` returned by Wrangler into `wrangler.toml` at `[[d1_databases]]`. Do not leave the zero UUID placeholder in production.
 
-Apply the schema:
+Apply the schema before the first bot update:
 
 ```bash
 npm run db:migrate:remote
 ```
+
+For Cloudflare Workers Builds, set the **Deploy command** to:
+
+```bash
+npm run deploy:cloudflare
+```
+
+This command applies pending D1 migrations first and only deploys the Worker if the migration succeeds. Do not leave the deployment command as only `npx wrangler deploy`, because deploying a Worker does not automatically create the SQL tables inside D1.
 
 Durable Object `BotSocket` is declared in `wrangler.toml` with migration tag `v1`. Do not remove or reuse this migration tag for a different class migration.
 
@@ -143,7 +151,7 @@ Configure repository secret:
 
 - `CLOUDFLARE_API_TOKEN` with the minimum Workers Scripts, D1, Durable Objects, Queues and R2 permissions required for deployment.
 
-The CI workflow runs syntax checks, unit tests, config checks and Wrangler dry-run on pull requests and pushes. Production deployment runs only from `main`.
+The CI workflow runs syntax checks, unit tests, config checks and Wrangler dry-run on pull requests and pushes. Production deployment runs only from `main`, applies D1 migrations, and then deploys the Worker.
 
 ## Routes
 
