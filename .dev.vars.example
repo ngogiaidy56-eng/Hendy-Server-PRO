@@ -5,6 +5,6 @@ WEBHOOK_SETUP_KEY=IBBVinhsIlIa22xQQKucuKgoBAQPdvX07IBNP34lDzc
 ADMIN_API_TOKEN=8639286417
 SOCKET_SIGNING_SECRET=
 INTERNAL_API_SECRET=
-CORE_BACKEND_TOKEN=https://hendy-server-pro.ngogiaidy56.workers.dev
+CORE_BACKEND_TOKEN=https://hendy-server-pro.ngogiaidy56.workers.dev/webhook
 # The following are non-secret Worker vars; set them in wrangler.toml or Cloudflare.
 # CORE_BACKEND_URL=https://hendy-server-pro.ngogiaidy56.workers.dev
