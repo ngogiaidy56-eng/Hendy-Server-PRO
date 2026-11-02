@@ -1,18 +1,22 @@
-# Copy to .dev.vars for local development. Never commit .dev.vars.
-# Use independent, newly generated values for every secret.
-BOT_TOKEN=8884608128:AAHV9bM8EtVqnO_S222I8IXcq2sYkDEZIyk
-WEBHOOK_SECRET_TOKEN=IBBVinhsIlIa22xQQKucuKgoBAQPdvX07IBNP34lDzc
+# Copy to .dev.vars for local development.
+# Do not commit .dev.vars. Generate a fresh value for every secret.
+BOT_TOKEN=
+WEBHOOK_SECRET_TOKEN=
 WEBHOOK_SETUP_KEY=
-ADMIN_API_TOKEN=8639286417
+
+# Optional: fill only if you use these features.
+ADMIN_API_TOKEN=
 SOCKET_SIGNING_SECRET=
 INTERNAL_API_SECRET=
 CORE_BACKEND_TOKEN=
 
-# Optional HTTPS override. When empty, Worker host is used automatically.
-# Example: TELEGRAM_WEBHOOK_URL=https://bot.example.com/webhook
+# Optional HTTPS URL override. Leave blank to use the current Worker hostname.
 TELEGRAM_WEBHOOK_URL=
 
-# Non-secret Worker variables:
-# CORE_BACKEND_URL=https://your-vietsub-backend.example
-# ADMIN_IDS=8639286417
+# Optional: defaults to the production Worker hostname.
+WORKER_BASE_URL=https://hendy-server-pro.ngogiaidy56.workers.dev
+
+# Non-secret Worker variables are configured in wrangler.toml / Dashboard:
+# ADMIN_IDS=123456789
 # MEDIA_ALLOWED_HOSTS=youtube.com,youtu.be,tiktok.com,facebook.com,fb.watch
+# CORE_BACKEND_URL=https://your-vietsub-backend.example

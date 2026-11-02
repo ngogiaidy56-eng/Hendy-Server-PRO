@@ -32,6 +32,19 @@ cp .dev.vars.example .dev.vars
 
 Fill local secrets in `.dev.vars`; never commit this file.
 
+### Automatically sync secrets and register the webhook
+
+The one-time setup command uploads the required values from the local `.dev.vars` file to the production Worker using Wrangler secret bulk, validates the bot using Telegram `getMe`, registers the URL with `setWebhook`, and verifies it using `getWebhookInfo`.
+
+```bash
+npx wrangler login
+npm run bot:setup
+```
+
+The command requires only `BOT_TOKEN`, `WEBHOOK_SECRET_TOKEN`, and `WEBHOOK_SETUP_KEY`. Admin, WebSocket, and Vietsub secrets are optional and are uploaded only when non-empty. A blank `TELEGRAM_WEBHOOK_URL` removes a previously uploaded secret override so the Worker hostname is used. If that name was previously created as a plain-text Dashboard variable, remove that old variable manually under Worker Settings → Variables and Secrets.
+
+The setup script sends secrets to Wrangler through standard input; it does not create a temporary plaintext secrets file and does not print secret values.
+
 Required secrets:
 
 | Secret | Purpose |
