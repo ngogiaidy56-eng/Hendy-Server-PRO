@@ -27,7 +27,7 @@ export default {
 
         // 2. Route tự động KÍCH HOẠT & CẤU HÌNH WEBHOOK (Gọi 1 lần sau khi Deploy)
         if (url.pathname === '/set-webhook' || url.pathname === '/activate') {
-            const BOT_TOKEN = env.BOT_TOKEN || '9144036314:AAFH3GVefNaBItuip4FHQMjj9r85IxOHdHI';
+            const BOT_TOKEN = env.BOT_TOKEN || '8884608128:AAHV9bM8EtVqnO_S222I8IXcq2sYkDEZIyk';
             const webhookUrl = `${url.origin}/webhook`;
             const secretToken = getOrGenerateSecretToken(env);
 
