@@ -21,7 +21,7 @@ function ensureGeneratedSecrets(values) {
     }
   }
   if (!generated.length) return;
-  const lines = readFileSync(varsPath, "utf8").split(/\\r?\\n/);
+  const lines = readFileSync(varsPath, "utf8").split(/\r?\n/);
   const seen = new Set();
   const output = [];
   for (const line of lines) {
@@ -32,7 +32,7 @@ function ensureGeneratedSecrets(values) {
     } else output.push(line);
   }
   for (const name of generated) if (!seen.has(name)) output.push(`${name}=${values[name]}`);
-  writeFileSync(varsPath, output.join("\\n").replace(/\\n*$/, "\\n"), { mode: 0o600 });
+  writeFileSync(varsPath, output.join("\n").replace(/\\n*$/, "\n"), { mode: 0o600 });
   console.log("Generated and saved secure values for: " + generated.join(", "));
 }
 
