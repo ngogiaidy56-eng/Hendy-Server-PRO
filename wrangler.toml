@@ -1,11 +1,43 @@
 name = "hendy-server-pro"
 main = "src/index.js"
-compatibility_date = "2026-10-28"
+compatibility_date = "2026-11-03"
 compatibility_flags = ["nodejs_compat"]
+workers_dev = true
 
 [vars]
-ADMIN_ID = "8639286417"
-MINI_APP_URL = "https://hendy-web-user.pages.dev"
-WEB_APP_URL = "https://hendy-mini-app.pages.dev"
-CORE_BACKEND_URL = "https://hendy-server-pro.ngogiaidy56.workers.dev/webhook"
-BOT_TOKEN = "8884608128:AAHV9bM8EtVqnO_S222I8IXcq2sYkDEZIyk"
+APP_ENV = "production"
+ADMIN_IDS = "8639286417"
+MEDIA_ALLOWED_HOSTS = "youtube.com,youtu.be,tiktok.com,facebook.com,fb.watch"
+
+[observability]
+enabled = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "hendy-server-pro-db"
+# Replace this zero UUID with the database_id returned by:
+# npx wrangler d1 create hendy-server-pro-db
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
+
+[[durable_objects.bindings]]
+name = "BOT_SOCKET"
+class_name = "BotSocket"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["BotSocket"]
+
+[[queues.producers]]
+binding = "JOBS_QUEUE"
+queue = "hendy-server-pro-jobs"
+
+[[queues.consumers]]
+queue = "hendy-server-pro-jobs"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 3
+
+[[r2_buckets]]
+binding = "ASSETS"
+bucket_name = "hendy-server-pro-assets"

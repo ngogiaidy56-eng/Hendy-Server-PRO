@@ -1,0 +1,43 @@
+name: Hendy Server PRO V2 - CI
+
+on:
+  push:
+    branches: [main, hendy-server-pro-v2]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hendy-server-pro-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Validate configuration
+        run: node scripts/check-config.mjs
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Wrangler dry run
+        run: npx wrangler deploy --dry-run --outdir=.wrangler-dry-run

@@ -1,15 +1,23 @@
 {
   "name": "hendy-server-pro",
-  "version": "1.0.0",
-  "description": "Telegram Bot Server running on Cloudflare Workers",
-  "main": "src/index.js",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Hendy Server PRO V2 — Telegram Bot API on Cloudflare Workers",
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "tail": "wrangler tail"
+    "tail": "wrangler tail",
+    "lint": "node --check src/index.js && node --check src/bot.js && node --check src/db.js && node --check src/security.js && node --check src/telegram.js && node --check src/durable-objects/BotSocket.js",
+    "test": "node --test",
+    "check": "npm run lint && npm test",
+    "db:migrate:local": "wrangler d1 migrations apply hendy-server-pro-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply hendy-server-pro-db --remote"
   },
   "devDependencies": {
     "wrangler": "^4.154.0"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }
