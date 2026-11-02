@@ -1,0 +1,6 @@
+{
+  "name": "Hendy Server PRO V2",
+  "description": "Telegram Bot API backend on Cloudflare Workers with D1 persistence, Durable Objects WebSocket sessions, and queuing.",
+  "permissions": [],
+  "capabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

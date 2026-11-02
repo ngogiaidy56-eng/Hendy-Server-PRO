@@ -3,7 +3,8 @@ export async function callTelegram(env, method, payload = {}) {
   const response = await fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/${method}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(15_000)
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data.ok === false) {

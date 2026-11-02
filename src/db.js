@@ -150,3 +150,115 @@ export async function getVideoJob(db, jobId) {
     "SELECT id, telegram_id, source_url, status, progress FROM video_jobs WHERE id = ?"
   ).bind(String(jobId)).first();
 }
+
+export async function createPaymentRequest(db, id, telegramId, amountVnd, provider = "manual", providerReference = null) {
+  await db.prepare(
+    `INSERT INTO payment_requests (id, telegram_id, amount_vnd, status, provider, provider_reference)
+     VALUES (?, ?, ?, 'pending', ?, ?)`
+  ).bind(id, String(telegramId), Number(amountVnd), provider, providerReference).run();
+  return { id, telegramId, amountVnd, status: "pending" };
+}
+
+export async function getPaymentRequest(db, id) {
+  return db.prepare(
+    "SELECT id, telegram_id, amount_vnd, status, provider, provider_reference, created_at FROM payment_requests WHERE id = ?"
+  ).bind(String(id)).first();
+}
+
+export async function listPendingPayments(db, limit = 20) {
+  const rows = await db.prepare(
+    `SELECT p.id, p.telegram_id, p.amount_vnd, p.provider, p.provider_reference, p.created_at, u.username, u.first_name
+     FROM payment_requests p
+     LEFT JOIN users u ON p.telegram_id = u.telegram_id
+     WHERE p.status = 'pending'
+     ORDER BY p.created_at ASC
+     LIMIT ?`
+  ).bind(limit).all();
+  return rows.results || [];
+}
+
+export async function approvePayment(db, id, actorId = "admin") {
+  const payment = await db.prepare(
+    "SELECT id, telegram_id, amount_vnd, status FROM payment_requests WHERE id = ?"
+  ).bind(String(id)).first();
+  if (!payment) throw new Error("PAYMENT_NOT_FOUND");
+  if (payment.status !== "pending") throw new Error("PAYMENT_ALREADY_PROCESSED");
+
+  const wallet = await db.prepare(
+    "SELECT balance_vnd FROM wallets WHERE telegram_id = ?"
+  ).bind(payment.telegram_id).first();
+  const currentBalance = Number(wallet?.balance_vnd || 0);
+  const newBalance = currentBalance + Number(payment.amount_vnd);
+  const txId = crypto.randomUUID();
+  const auditId = crypto.randomUUID();
+
+  await db.batch([
+    db.prepare(
+      "UPDATE payment_requests SET status = 'confirmed', updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+    ).bind(payment.id),
+    db.prepare(
+      "UPDATE wallets SET balance_vnd = ?, updated_at = CURRENT_TIMESTAMP WHERE telegram_id = ?"
+    ).bind(newBalance, payment.telegram_id),
+    db.prepare(
+      `INSERT INTO wallet_transactions (id, telegram_id, amount_vnd, balance_after_vnd, transaction_type, reference, description)
+       VALUES (?, ?, ?, ?, 'deposit', ?, ?)`
+    ).bind(txId, payment.telegram_id, payment.amount_vnd, newBalance, payment.id, `Nạp tiền qua giao dịch ${payment.id}`),
+    db.prepare(
+      "INSERT INTO audit_logs (id, actor_id, action, target, details_json) VALUES (?, ?, 'payment_approve', ?, ?)"
+    ).bind(auditId, String(actorId), payment.id, JSON.stringify({ amount: payment.amount_vnd, newBalance, telegramId: payment.telegram_id }))
+  ]);
+
+  return { success: true, paymentId: payment.id, telegramId: payment.telegram_id, amountVnd: payment.amount_vnd, newBalance };
+}
+
+export async function rejectPayment(db, id, actorId = "admin", reason = "") {
+  const payment = await db.prepare(
+    "SELECT id, telegram_id, amount_vnd, status FROM payment_requests WHERE id = ?"
+  ).bind(String(id)).first();
+  if (!payment) throw new Error("PAYMENT_NOT_FOUND");
+  if (payment.status !== "pending") throw new Error("PAYMENT_ALREADY_PROCESSED");
+
+  const auditId = crypto.randomUUID();
+  await db.batch([
+    db.prepare(
+      "UPDATE payment_requests SET status = 'rejected', updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+    ).bind(payment.id),
+    db.prepare(
+      "INSERT INTO audit_logs (id, actor_id, action, target, details_json) VALUES (?, ?, 'payment_reject', ?, ?)"
+    ).bind(auditId, String(actorId), payment.id, JSON.stringify({ reason, telegramId: payment.telegram_id }))
+  ]);
+
+  return { success: true, paymentId: payment.id, telegramId: payment.telegram_id };
+}
+
+export async function getUserVideoJobs(db, telegramId, limit = 10) {
+  const rows = await db.prepare(
+    "SELECT id, source_url, status, progress, error_code, created_at, updated_at FROM video_jobs WHERE telegram_id = ? ORDER BY created_at DESC LIMIT ?"
+  ).bind(String(telegramId), limit).all();
+  return rows.results || [];
+}
+
+export async function listRecentVideoJobs(db, limit = 20) {
+  const rows = await db.prepare(
+    `SELECT j.id, j.telegram_id, j.source_url, j.status, j.progress, j.created_at, u.username
+     FROM video_jobs j
+     LEFT JOIN users u ON j.telegram_id = u.telegram_id
+     ORDER BY j.created_at DESC LIMIT ?`
+  ).bind(limit).all();
+  return rows.results || [];
+}
+
+export async function getUserTransactions(db, telegramId, limit = 10) {
+  const rows = await db.prepare(
+    "SELECT id, amount_vnd, balance_after_vnd, transaction_type, reference, description, created_at FROM wallet_transactions WHERE telegram_id = ? ORDER BY created_at DESC LIMIT ?"
+  ).bind(String(telegramId), limit).all();
+  return rows.results || [];
+}
+
+export async function listRecentAuditLogs(db, limit = 20) {
+  const rows = await db.prepare(
+    "SELECT id, actor_id, action, target, details_json, created_at FROM audit_logs ORDER BY created_at DESC LIMIT ?"
+  ).bind(limit).all();
+  return rows.results || [];
+}
+
