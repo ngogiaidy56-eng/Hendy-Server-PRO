@@ -115,10 +115,11 @@ export const webhookLogger = {
   },
 
   success(summary, durationMs, details = {}) {
-    console.log(`[Webhook Ingest] ✅ Update #${summary.updateId} processed successfully in ${durationMs}ms`);
+    console.log(`[Webhook Ingest] ✅ Update #${summary?.updateId} processed successfully in ${durationMs}ms`);
     recordWebhookTrace({
       event: "processed",
-      updateId: summary.updateId,
+      updateId: summary?.updateId,
+      summary,
       durationMs,
       details
     });
@@ -141,6 +142,7 @@ export const webhookLogger = {
     recordWebhookTrace({
       event: "error",
       updateId: summary?.updateId,
+      summary,
       error: error?.message || String(error),
       durationMs
     });

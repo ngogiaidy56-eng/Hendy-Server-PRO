@@ -21,6 +21,8 @@ import { callTelegram } from "./telegram.js";
 import { parseJsonObject, resolveTelegramWebhookUrl } from "./validation.js";
 import { Router } from "./core/router.js";
 import { getRecentWebhookTraces, summarizeTelegramUpdate, webhookLogger } from "./core/logger.js";
+import { validateTelegramWebhookSecretMiddleware } from "./core/webhook-auth.js";
+import { renderDashboardHtml } from "./core/admin-dashboard.js";
 
 const json = (data, status = 200, headers = {}) => Response.json(data, {
   status,
@@ -102,43 +104,7 @@ router.get("/ready", async ({ env }) => {
 
 // --- 2. TELEGRAM WEBHOOK INGESTION & SETUP ---
 
-router.post("/webhook", async ({ request, env }) => {
-  const startTime = Date.now();
-  if (!env.BOT_TOKEN || !isValidTelegramSecret(env.WEBHOOK_SECRET_TOKEN)) {
-    webhookLogger.rejected("telegram_secrets_not_configured");
-    return json({ ok: false, error: "webhook_not_configured" }, 503);
-  }
-  const suppliedSecret = request.headers.get("x-telegram-bot-api-secret-token") || "";
-  if (!suppliedSecret || !constantTimeEqual(suppliedSecret, env.WEBHOOK_SECRET_TOKEN)) {
-    webhookLogger.rejected("unauthorized_secret_header", {
-      headerReceived: Boolean(suppliedSecret),
-      suppliedLength: suppliedSecret.length,
-      expectedLength: env.WEBHOOK_SECRET_TOKEN?.length || 0
-    });
-    return json({ ok: false, error: "unauthorized" }, 401);
-  }
-  const contentLength = Number(request.headers.get("content-length") || 0);
-  if (contentLength > 1024 * 1024) {
-    webhookLogger.rejected("payload_too_large", { contentLength });
-    return json({ ok: false, error: "payload_too_large" }, 413);
-  }
-
-  let update;
-  try {
-    update = await request.json();
-  } catch (err) {
-    webhookLogger.rejected("invalid_json", { error: err.message });
-    return json({ ok: false, error: "invalid_json" }, 400);
-  }
-
-  if (!Number.isSafeInteger(update?.update_id)) {
-    webhookLogger.rejected("invalid_update_id", { update });
-    return json({ ok: false, error: "invalid_update_id" }, 400);
-  }
-
-  const summary = summarizeTelegramUpdate(update);
-  webhookLogger.incoming(summary, { contentLength });
-
+router.post("/webhook", validateTelegramWebhookSecretMiddleware, async ({ env, update, summary, startTime }) => {
   let db;
   try {
     db = requireDatabase(env);
@@ -451,6 +417,57 @@ router.get("/api/admin/webhook-logs", async ({ request, env, url }) => {
   const limit = Math.max(1, Math.min(100, Number(url.searchParams.get("limit") || 50)));
   const traces = getRecentWebhookTraces(limit);
   return json({ ok: true, count: traces.length, traces });
+});
+
+const handleAdminDashboard = async ({ request, env, url }) => {
+  const token = url.searchParams.get("token") || request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+  if (token && env.ADMIN_API_TOKEN && !constantTimeEqual(token, env.ADMIN_API_TOKEN)) {
+    return json({ ok: false, error: "unauthorized" }, 401);
+  }
+  return new Response(renderDashboardHtml(), {
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "no-store"
+    }
+  });
+};
+
+router.get("/admin/dashboard", handleAdminDashboard);
+router.get("/api/admin/dashboard", handleAdminDashboard);
+
+router.get("/api/admin/analytics", async ({ request, env }) => {
+  if (!adminAuthorized(request, env)) return json({ ok: false, error: "unauthorized" }, 401);
+  const traces = getRecentWebhookTraces(100);
+
+  const stats = {
+    totalUpdates: traces.length,
+    callbacks: 0,
+    successes: 0,
+    failures: 0,
+    signatureRejections: 0,
+    buttonActions: {},
+    failureReasons: {}
+  };
+
+  for (const t of traces) {
+    if (t.summary?.type === "callback_query") {
+      stats.callbacks++;
+      const btn = t.summary.data || "unknown";
+      stats.buttonActions[btn] = (stats.buttonActions[btn] || 0) + 1;
+    }
+    if (t.event === "processed") {
+      stats.successes++;
+    } else if (t.event === "error" || t.event === "rejected") {
+      stats.failures++;
+      const reason = t.reason || t.error || "unknown_failure";
+      stats.failureReasons[reason] = (stats.failureReasons[reason] || 0) + 1;
+      if (reason.includes("signature") || reason.includes("secret")) {
+        stats.signatureRejections++;
+      }
+    }
+  }
+
+  return json({ ok: true, analytics: stats });
 });
 
 router.post("/api/admin/socket-ticket", async ({ request, env }) => {
