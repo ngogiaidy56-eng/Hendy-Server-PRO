@@ -15,7 +15,7 @@ const todayUtc = new Date().toISOString().slice(0, 10);
 if (!compatibilityDate) {
   errors.push("Cloudflare compatibility_date");
 } else if (compatibilityDate > todayUtc) {
-  errors.push(\`compatibility_date is in the future (\${compatibilityDate}; UTC today is \${todayUtc})\`);
+  errors.push("compatibility_date is in the future (" + compatibilityDate + "; UTC today is " + todayUtc + ")");
 }
 
 const databaseId = config.match(/^database_id\s*=\s*"([^"]+)"/m)?.[1];
@@ -32,4 +32,4 @@ if (/BOT_TOKEN\s*=|WEBHOOK_SECRET_TOKEN\s*=/.test(config)) {
   console.error("Do not store Telegram credentials in wrangler.toml.");
   process.exit(1);
 }
-console.log(\`Wrangler configuration looks valid (compatibility_date \${compatibilityDate}, D1 binding configured).\`);
+console.log("Wrangler configuration looks valid (compatibility_date " + compatibilityDate + ", D1 binding configured).");
