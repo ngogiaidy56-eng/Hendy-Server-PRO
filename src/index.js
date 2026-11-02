@@ -27,7 +27,7 @@ export default {
 
         // 2. Route tự động KÍCH HOẠT & CẤU HÌNH WEBHOOK (Gọi 1 lần sau khi Deploy)
         if (url.pathname === '/set-webhook' || url.pathname === '/activate') {
-            const BOT_TOKEN = env.BOT_TOKEN || '9287501728:AAGNeyWOqwHLkbA_08PbonEoK0dSYkbowoQ';
+            const BOT_TOKEN = env.BOT_TOKEN || '9144036314:AAFH3GVefNaBItuip4FHQMjj9r85IxOHdHI';
             const webhookUrl = `${url.origin}/webhook`;
             const secretToken = getOrGenerateSecretToken(env);
 
@@ -46,7 +46,7 @@ export default {
 
         // 3. Route kiểm tra chi tiết trạng thái Webhook từ Telegram
         if (url.pathname === '/webhook-info') {
-            const BOT_TOKEN = env.BOT_TOKEN || '9287501728:AAGNeyWOqwHLkbA_08PbonEoK0dSYkbowoQ';
+            const BOT_TOKEN = env.BOT_TOKEN || '';
             const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getWebhookInfo`);
             const data = await res.json();
             return new Response(JSON.stringify(data, null, 2), {
