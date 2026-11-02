@@ -71,16 +71,45 @@ export async function mainKeyboard(env, db, telegramId = null) {
   return { inline_keyboard: keyboard };
 }
 
-export async function sendMessage(env, chatId, text, replyMarkup) {
-  return callTelegram(env, "sendMessage", {
+export async function sendMessage(env, chatId, text, replyMarkup, parseMode = "Markdown") {
+  const payload = {
     chat_id: chatId,
     text,
     reply_markup: replyMarkup,
     disable_web_page_preview: true
-  });
+  };
+  if (parseMode) payload.parse_mode = parseMode;
+  return callTelegram(env, "sendMessage", payload);
 }
 
-async function showUserHistory(env, db, chatId, telegramId) {
+/**
+ * Safely edits the original message if possible, or gracefully falls back to sending
+ * a fresh message so button clicks never fail or stay unresponsive in Telegram.
+ */
+export async function safeEditOrSend(env, chatId, messageId, text, replyMarkup, parseMode = "Markdown") {
+  const payload = {
+    chat_id: chatId,
+    text,
+    reply_markup: replyMarkup,
+    disable_web_page_preview: true
+  };
+  if (parseMode) payload.parse_mode = parseMode;
+
+  if (messageId) {
+    try {
+      return await callTelegram(env, "editMessageText", {
+        ...payload,
+        message_id: messageId
+      });
+    } catch (err) {
+      console.warn("safeEditOrSend: editMessageText failed, falling back to sendMessage:", err.message);
+    }
+  }
+
+  return await callTelegram(env, "sendMessage", payload);
+}
+
+async function showUserHistory(env, db, chatId, messageId, telegramId) {
   const [jobs, transactions] = await Promise.all([
     getUserVideoJobs(db, telegramId, 5),
     getUserTransactions(db, telegramId, 5)
@@ -108,15 +137,17 @@ async function showUserHistory(env, db, chatId, telegramId) {
     }
   }
 
-  await sendMessage(env, chatId, text, {
+  await safeEditOrSend(env, chatId, messageId, text, {
     inline_keyboard: [[{ text: "🔙 Menu chính", callback_data: "menu:home" }]]
   });
 }
 
-async function handleDepositRequest(env, db, chatId, telegramId, amountVnd) {
+async function handleDepositRequest(env, db, chatId, messageId, telegramId, amountVnd) {
   const amount = Number(amountVnd);
   if (!Number.isSafeInteger(amount) || amount < 5000 || amount > 50_000_000) {
-    await sendMessage(env, chatId, "❌ Số tiền nạp không hợp lệ (tối thiểu 5.000 VNĐ, tối đa 50.000.000 VNĐ).");
+    await safeEditOrSend(env, chatId, messageId, "❌ Số tiền nạp không hợp lệ (tối thiểu 5.000 VNĐ, tối đa 50.000.000 VNĐ).", {
+      inline_keyboard: [[{ text: "🔙 Menu chính", callback_data: "menu:home" }]]
+    });
     return;
   }
 
@@ -140,7 +171,7 @@ async function handleDepositRequest(env, db, chatId, telegramId, amountVnd) {
     `• Nội dung CK: \`${paymentId}\`\n\n` +
     `⚠️ *Lưu ý:* Vui lòng ghi chính xác nội dung chuyển khoản để hệ thống đối soát và cộng tiền nhanh nhất.`;
 
-  await sendMessage(env, chatId, messageText, {
+  await safeEditOrSend(env, chatId, messageId, messageText, {
     inline_keyboard: [
       [{ text: "📜 Xem lịch sử", callback_data: "user:history" }],
       [{ text: "🔙 Menu chính", callback_data: "menu:home" }]
@@ -167,15 +198,18 @@ async function handleDepositRequest(env, db, chatId, telegramId, amountVnd) {
   }
 }
 
-async function sendAdminPanel(env, chatId, telegramId, db) {
+async function sendAdminPanel(env, chatId, messageId, telegramId, db) {
   if (!isAdmin(env, telegramId)) {
-    await sendMessage(env, chatId, "⛔ Bạn không có quyền truy cập khu vực quản trị.");
+    await safeEditOrSend(env, chatId, messageId, "⛔ Bạn không có quyền truy cập khu vực quản trị.", {
+      inline_keyboard: [[{ text: "🔙 Menu chính", callback_data: "menu:home" }]]
+    });
     return;
   }
   const stats = await getAdminStats(db);
-  await sendMessage(
+  await safeEditOrSend(
     env,
     chatId,
+    messageId,
     `🛠 *HENDY SERVER PRO V2 — QUẢN TRỊ*\n\n` +
     `👥 Người dùng: *${stats.users}*\n` +
     `🎬 Video đang xử lý: *${stats.activeVideoJobs}*\n` +
@@ -244,7 +278,7 @@ bot.command("deposit", async ({ chatId, telegramId, args, env, db }) => {
   if (args) {
     const amount = parseInt(args.replace(/[^0-9]/g, ""), 10);
     if (amount) {
-      await handleDepositRequest(env, db, chatId, telegramId, amount);
+      await handleDepositRequest(env, db, chatId, null, telegramId, amount);
       return;
     }
   }
@@ -270,15 +304,15 @@ bot.command("deposit", async ({ chatId, telegramId, args, env, db }) => {
 }, { description: "Tạo yêu cầu nạp tiền vào ví (/deposit 50000)" });
 
 bot.command("history", async ({ chatId, telegramId, env, db }) => {
-  await showUserHistory(env, db, chatId, telegramId);
+  await showUserHistory(env, db, chatId, null, telegramId);
 }, { description: "Xem lịch sử video jobs và biến động số dư" });
 
 bot.command("jobs", async ({ chatId, telegramId, env, db }) => {
-  await showUserHistory(env, db, chatId, telegramId);
+  await showUserHistory(env, db, chatId, null, telegramId);
 }, { description: "Xem danh sách các video jobs của bạn" });
 
 bot.command("admin", async ({ chatId, telegramId, env, db }) => {
-  await sendAdminPanel(env, chatId, telegramId, db);
+  await sendAdminPanel(env, chatId, null, telegramId, db);
 }, { description: "Bảng điều khiển quản trị viên", adminOnly: true });
 
 bot.command("admin_payments", async ({ chatId, env, db }) => {
@@ -326,7 +360,7 @@ bot.session("waiting_deposit_amount", async ({ text, chatId, telegramId, env, db
     return;
   }
   await clearSession(db, telegramId);
-  await handleDepositRequest(env, db, chatId, telegramId, amount);
+  await handleDepositRequest(env, db, chatId, null, telegramId, amount);
 });
 
 bot.session("waiting_video_link", async ({ text, chatId, telegramId, env, db }) => {
@@ -378,35 +412,38 @@ bot.fallback(async ({ chatId, env, db, telegramId }) => {
 
 // --- 3. CALLBACK QUERIES REGISTRATION ---
 
-bot.callback("menu:home", async ({ chatId, message, telegramId, env, db }) => {
+bot.callback("menu:home", async ({ chatId, messageId, telegramId, env, db }) => {
   await clearSession(db, telegramId);
   const balance = await getWalletBalance(db, telegramId);
-  await callTelegram(env, "editMessageText", {
-    chat_id: chatId,
-    message_id: message.message_id,
-    text: `🤖 *HENDY SERVER PRO V2*\n` +
-          `Số dư ví: *${balance.toLocaleString("vi-VN")} VNĐ*\n\n` +
-          `Chọn dịch vụ bên dưới:`,
-    reply_markup: await mainKeyboard(env, db, telegramId)
-  });
+  await safeEditOrSend(
+    env,
+    chatId,
+    messageId,
+    `🤖 *HENDY SERVER PRO V2*\n` +
+    `Số dư ví: *${balance.toLocaleString("vi-VN")} VNĐ*\n\n` +
+    `Chọn dịch vụ bên dưới:`,
+    await mainKeyboard(env, db, telegramId)
+  );
 });
 
-bot.callback("service:vietsub", async ({ chatId, message, telegramId, env, db }) => {
+bot.callback("service:vietsub", async ({ chatId, messageId, telegramId, env, db }) => {
   await setSession(db, telegramId, { action: "waiting_video_link" });
-  await callTelegram(env, "editMessageText", {
-    chat_id: chatId,
-    message_id: message.message_id,
-    text: "🎬 Gửi link video HTTPS từ YouTube, TikTok hoặc Facebook để tạo yêu cầu Vietsub.",
-    reply_markup: { inline_keyboard: [[{ text: "🔙 Menu chính", callback_data: "menu:home" }]] }
-  });
+  await safeEditOrSend(
+    env,
+    chatId,
+    messageId,
+    "🎬 Gửi link video HTTPS từ YouTube, TikTok hoặc Facebook để tạo yêu cầu Vietsub.",
+    { inline_keyboard: [[{ text: "🔙 Menu chính", callback_data: "menu:home" }]] }
+  );
 });
 
-bot.callback("service:deposit", async ({ chatId, message, env }) => {
-  await callTelegram(env, "editMessageText", {
-    chat_id: chatId,
-    message_id: message.message_id,
-    text: "💳 *CHỌN MỨC TIỀN NẠP VÀO VÍ:*\n\nHệ thống hỗ trợ nạp qua chuyển khoản ngân hàng tự động đối soát nội dung.",
-    reply_markup: {
+bot.callback("service:deposit", async ({ chatId, messageId, env }) => {
+  await safeEditOrSend(
+    env,
+    chatId,
+    messageId,
+    "💳 *CHỌN MỨC TIỀN NẠP VÀO VÍ:*\n\nHệ thống hỗ trợ nạp qua chuyển khoản ngân hàng tự động đối soát nội dung.",
+    {
       inline_keyboard: [
         [
           { text: "10.000 đ", callback_data: "deposit:10000" },
@@ -420,59 +457,62 @@ bot.callback("service:deposit", async ({ chatId, message, env }) => {
         [{ text: "🔙 Menu chính", callback_data: "menu:home" }]
       ]
     }
-  });
+  );
 });
 
-bot.callback("deposit:*", async ({ data, chatId, message, telegramId, env, db }) => {
+bot.callback("deposit:*", async ({ data, chatId, messageId, telegramId, env, db }) => {
   const val = data.replace("deposit:", "");
   if (val === "custom") {
     await setSession(db, telegramId, { action: "waiting_deposit_amount" });
-    await callTelegram(env, "editMessageText", {
-      chat_id: chatId,
-      message_id: message.message_id,
-      text: "✏️ Vui lòng gửi tin nhắn chứa số tiền bạn muốn nạp (ví dụ: `50000` hoặc `200000`):",
-      reply_markup: { inline_keyboard: [[{ text: "🔙 Menu chính", callback_data: "menu:home" }]] }
-    });
+    await safeEditOrSend(
+      env,
+      chatId,
+      messageId,
+      "✏️ Vui lòng gửi tin nhắn chứa số tiền bạn muốn nạp (ví dụ: `50000` hoặc `200000`):",
+      { inline_keyboard: [[{ text: "🔙 Menu chính", callback_data: "menu:home" }]] }
+    );
     return;
   }
   const amount = parseInt(val, 10);
   if (amount) {
-    await handleDepositRequest(env, db, chatId, telegramId, amount);
+    await handleDepositRequest(env, db, chatId, messageId, telegramId, amount);
   }
 });
 
-bot.callback("wallet:balance", async ({ chatId, message, telegramId, env, db }) => {
+bot.callback("wallet:balance", async ({ chatId, messageId, telegramId, env, db }) => {
   const balance = await getWalletBalance(db, telegramId);
-  await callTelegram(env, "editMessageText", {
-    chat_id: chatId,
-    message_id: message.message_id,
-    text: `💰 *Số dư ví hiện tại:*\n*${balance.toLocaleString("vi-VN")} VNĐ*`,
-    reply_markup: {
+  await safeEditOrSend(
+    env,
+    chatId,
+    messageId,
+    `💰 *Số dư ví hiện tại:*\n*${balance.toLocaleString("vi-VN")} VNĐ*`,
+    {
       inline_keyboard: [
         [{ text: "💳 Nạp thêm", callback_data: "service:deposit" }],
         [{ text: "🔙 Menu chính", callback_data: "menu:home" }]
       ]
     }
-  });
+  );
 });
 
-bot.callback("user:history", async ({ chatId, telegramId, env, db }) => {
-  await showUserHistory(env, db, chatId, telegramId);
+bot.callback("user:history", async ({ chatId, messageId, telegramId, env, db }) => {
+  await showUserHistory(env, db, chatId, messageId, telegramId);
 });
 
-bot.callback("admin:panel", async ({ chatId, telegramId, env, db }) => {
-  await sendAdminPanel(env, chatId, telegramId, db);
+bot.callback("admin:panel", async ({ chatId, messageId, telegramId, env, db }) => {
+  await sendAdminPanel(env, chatId, messageId, telegramId, db);
 }, { adminOnly: true });
 
-bot.callback("admin:pending_payments", async ({ chatId, message, env, db }) => {
+bot.callback("admin:pending_payments", async ({ chatId, messageId, env, db }) => {
   const pending = await listPendingPayments(db, 10);
   if (!pending.length) {
-    await callTelegram(env, "editMessageText", {
-      chat_id: chatId,
-      message_id: message.message_id,
-      text: "✅ Không có yêu cầu nạp tiền nào đang chờ duyệt.",
-      reply_markup: { inline_keyboard: [[{ text: "🔙 Bảng quản trị", callback_data: "admin:panel" }]] }
-    });
+    await safeEditOrSend(
+      env,
+      chatId,
+      messageId,
+      "✅ Không có yêu cầu nạp tiền nào đang chờ duyệt.",
+      { inline_keyboard: [[{ text: "🔙 Bảng quản trị", callback_data: "admin:panel" }]] }
+    );
     return;
   }
   await sendMessage(env, chatId, `📋 Tìm thấy ${pending.length} yêu cầu nạp tiền đang chờ:`);
@@ -493,38 +533,42 @@ bot.callback("admin:pending_payments", async ({ chatId, message, env, db }) => {
   }
 }, { adminOnly: true });
 
-bot.callback("admin:jobs", async ({ chatId, message, env, db }) => {
+bot.callback("admin:jobs", async ({ chatId, messageId, env, db }) => {
   const jobs = await listRecentVideoJobs(db, 10);
   if (!jobs.length) {
-    await callTelegram(env, "editMessageText", {
-      chat_id: chatId,
-      message_id: message.message_id,
-      text: "ℹ️ Chưa có video jobs nào.",
-      reply_markup: { inline_keyboard: [[{ text: "🔙 Bảng quản trị", callback_data: "admin:panel" }]] }
-    });
+    await safeEditOrSend(
+      env,
+      chatId,
+      messageId,
+      "ℹ️ Chưa có video jobs nào.",
+      { inline_keyboard: [[{ text: "🔙 Bảng quản trị", callback_data: "admin:panel" }]] }
+    );
     return;
   }
   let msg = `🎬 *10 VIDEO JOBS GẦN NHẤT:*\n\n`;
   for (const j of jobs) {
     msg += `• [${j.id.slice(0, 8)}] User \`${j.telegram_id}\` | ${j.status.toUpperCase()} (${j.progress}%)\n`;
   }
-  await callTelegram(env, "editMessageText", {
-    chat_id: chatId,
-    message_id: message.message_id,
-    text: msg,
-    reply_markup: { inline_keyboard: [[{ text: "🔙 Bảng quản trị", callback_data: "admin:panel" }]] }
-  });
+  await safeEditOrSend(
+    env,
+    chatId,
+    messageId,
+    msg,
+    { inline_keyboard: [[{ text: "🔙 Bảng quản trị", callback_data: "admin:panel" }]] }
+  );
 }, { adminOnly: true });
 
-bot.callback("pay:app:*", async ({ data, chatId, message, telegramId, env, db }) => {
+bot.callback("pay:app:*", async ({ data, chatId, messageId, telegramId, env, db }) => {
   const paymentId = data.replace("pay:app:", "");
   try {
     const result = await approvePayment(db, paymentId, telegramId);
-    await callTelegram(env, "editMessageText", {
-      chat_id: chatId,
-      message_id: message.message_id,
-      text: `✅ *ĐÃ DUYỆT YÊU CẦU ${paymentId}*\nCộng: *${result.amountVnd.toLocaleString("vi-VN")} VNĐ*\nSố dư mới của user: ${result.newBalance.toLocaleString("vi-VN")} VNĐ`
-    });
+    await safeEditOrSend(
+      env,
+      chatId,
+      messageId,
+      `✅ *ĐÃ DUYỆT YÊU CẦU ${paymentId}*\nCộng: *${result.amountVnd.toLocaleString("vi-VN")} VNĐ*\nSố dư mới của user: ${result.newBalance.toLocaleString("vi-VN")} VNĐ`,
+      { inline_keyboard: [[{ text: "🔙 Bảng quản trị", callback_data: "admin:panel" }]] }
+    );
     await sendMessage(
       env,
       result.telegramId,
@@ -535,15 +579,17 @@ bot.callback("pay:app:*", async ({ data, chatId, message, telegramId, env, db })
   }
 }, { adminOnly: true });
 
-bot.callback("pay:rej:*", async ({ data, chatId, message, telegramId, env, db }) => {
+bot.callback("pay:rej:*", async ({ data, chatId, messageId, telegramId, env, db }) => {
   const paymentId = data.replace("pay:rej:", "");
   try {
     const result = await rejectPayment(db, paymentId, telegramId, "Admin rejected");
-    await callTelegram(env, "editMessageText", {
-      chat_id: chatId,
-      message_id: message.message_id,
-      text: `❌ *ĐÃ TỪ CHỐI YÊU CẦU ${paymentId}*`
-    });
+    await safeEditOrSend(
+      env,
+      chatId,
+      messageId,
+      `❌ *ĐÃ TỪ CHỐI YÊU CẦU ${paymentId}*`,
+      { inline_keyboard: [[{ text: "🔙 Bảng quản trị", callback_data: "admin:panel" }]] }
+    );
     await sendMessage(
       env,
       result.telegramId,
@@ -559,12 +605,14 @@ bot.callback("pay:rej:*", async ({ data, chatId, message, telegramId, env, db })
 export async function handleTelegramUpdate(update, env, db) {
   const helpers = {
     sendMessage,
+    safeEditOrSend,
     callTelegram,
     clearSession,
     setSession,
     getSession,
     upsertTelegramUser,
-    isAdmin
+    isAdmin,
+    mainKeyboard
   };
   return bot.dispatch(update, env, db, helpers);
 }

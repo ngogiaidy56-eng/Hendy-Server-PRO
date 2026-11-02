@@ -146,3 +146,49 @@ test("BotDispatcher dispatches prefix and wildcard callback queries", async () =
   }, {}, {}, mockHelpers);
   assert.equal(callbackResult, "deposit:50000");
 });
+
+test("BotDispatcher handles callback query even if answerCallbackQuery fails", async () => {
+  const bot = new BotDispatcher();
+  let executed = false;
+
+  bot.callback("test:action", () => {
+    executed = true;
+  });
+
+  const mockHelpers = {
+    callTelegram: async (_env, method) => {
+      if (method === "answerCallbackQuery") throw new Error("Network timeout");
+      return { ok: true };
+    },
+    upsertTelegramUser: async () => "123",
+    isAdmin: () => false
+  };
+
+  await bot.dispatch({
+    callback_query: { id: "cb_err", from: { id: 123 }, message: { chat: { id: 50 }, message_id: 1 }, data: "test:action" }
+  }, {}, {}, mockHelpers);
+
+  assert.equal(executed, true);
+});
+
+test("BotDispatcher gracefully handles unmatched callback query without throwing", async () => {
+  const bot = new BotDispatcher();
+  let fallbackMessageSent = null;
+
+  const mockHelpers = {
+    callTelegram: async () => ({ ok: true }),
+    safeEditOrSend: async (_env, _chatId, _messageId, text) => {
+      fallbackMessageSent = text;
+    },
+    upsertTelegramUser: async () => "123",
+    isAdmin: () => false,
+    mainKeyboard: async () => ({ inline_keyboard: [] })
+  };
+
+  await bot.dispatch({
+    callback_query: { id: "cb_unknown", from: { id: 123 }, message: { chat: { id: 50 }, message_id: 1 }, data: "unknown:legacy:button" }
+  }, {}, {}, mockHelpers);
+
+  assert.ok(fallbackMessageSent && fallbackMessageSent.includes("Nút bấm"));
+});
+

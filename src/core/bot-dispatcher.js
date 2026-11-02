@@ -94,7 +94,16 @@ export class BotDispatcher {
    * Dispatches incoming Telegram update
    */
   async dispatch(update, env, db, helpers) {
-    const { sendMessage, clearSession, getSession, upsertTelegramUser, isAdmin } = helpers;
+    const {
+      sendMessage,
+      safeEditOrSend,
+      callTelegram,
+      clearSession,
+      getSession,
+      upsertTelegramUser,
+      isAdmin,
+      mainKeyboard
+    } = helpers;
 
     // 1. Handle incoming message
     if (update?.message) {
@@ -108,23 +117,42 @@ export class BotDispatcher {
 
       const userIsAdmin = isAdmin(env, telegramId);
 
-      // Check if message is a command
-      if (text.startsWith("/")) {
-        const [rawCmd, ...argParts] = text.split(/\s+/);
-        const cmdName = rawCmd.slice(1).toLowerCase().split("@")[0]; // remove bot mention if any
-        const args = argParts.join(" ");
+      try {
+        // Check if message is a command
+        if (text.startsWith("/")) {
+          const [rawCmd, ...argParts] = text.split(/\s+/);
+          const cmdName = rawCmd.slice(1).toLowerCase().split("@")[0]; // remove bot mention if any
+          const args = argParts.join(" ");
 
-        const registered = this.commands.get(cmdName);
-        if (registered) {
-          if (registered.adminOnly && !userIsAdmin) {
-            await sendMessage(env, chatId, "⛔ Bạn không có quyền truy cập lệnh quản trị này.");
-            return;
+          const registered = this.commands.get(cmdName);
+          if (registered) {
+            if (registered.adminOnly && !userIsAdmin) {
+              await sendMessage(env, chatId, "⛔ Bạn không có quyền truy cập lệnh quản trị này.");
+              return;
+            }
+            return await registered.handler({
+              message,
+              chatId,
+              telegramId,
+              args,
+              text,
+              env,
+              db,
+              userIsAdmin,
+              helpers
+            });
           }
-          return await registered.handler({
+        }
+
+        // Check if user is in an active conversational session
+        const session = await getSession(db, telegramId);
+        if (session?.action && this.sessionHandlers.has(session.action)) {
+          const handler = this.sessionHandlers.get(session.action);
+          return await handler({
             message,
             chatId,
             telegramId,
-            args,
+            session,
             text,
             env,
             db,
@@ -132,79 +160,87 @@ export class BotDispatcher {
             helpers
           });
         }
-      }
 
-      // Check if user is in an active conversational session
-      const session = await getSession(db, telegramId);
-      if (session?.action && this.sessionHandlers.has(session.action)) {
-        const handler = this.sessionHandlers.get(session.action);
-        return await handler({
-          message,
-          chatId,
-          telegramId,
-          session,
-          text,
-          env,
-          db,
-          userIsAdmin,
-          helpers
-        });
-      }
-
-      // Fallback
-      if (this.defaultHandler) {
-        return await this.defaultHandler({
-          message,
-          chatId,
-          telegramId,
-          text,
-          env,
-          db,
-          userIsAdmin,
-          helpers
-        });
-      }
-    }
-
-    // 2. Handle callback query
-    if (update?.callback_query) {
-      const query = update.callback_query;
-      if (!query.id) return;
-
-      const { callTelegram } = helpers;
-      await callTelegram(env, "answerCallbackQuery", { callback_query_id: query.id });
-
-      const message = query.message;
-      if (!message?.chat?.id || !query.from?.id) return;
-
-      const chatId = message.chat.id;
-      const telegramId = String(query.from.id);
-      await upsertTelegramUser(db, query.from);
-      const data = String(query.data || "");
-      const userIsAdmin = isAdmin(env, telegramId);
-
-      for (const entry of this.callbackPatterns) {
-        if (entry.matcher(data)) {
-          if (entry.adminOnly && !userIsAdmin) {
-            await callTelegram(env, "editMessageText", {
-              chat_id: chatId,
-              message_id: message.message_id,
-              text: "⛔ Bạn không có quyền thực hiện hành động này."
-            });
-            return;
-          }
-          return await entry.handler({
-            query,
+        // Fallback
+        if (this.defaultHandler) {
+          return await this.defaultHandler({
             message,
             chatId,
             telegramId,
-            data,
+            text,
             env,
             db,
             userIsAdmin,
             helpers
           });
         }
+      } catch (err) {
+        console.error("Message dispatch error:", err?.message || err);
+        await sendMessage(env, chatId, "⚠️ Đã có lỗi xảy ra khi xử lý yêu cầu. Vui lòng thử lại sau.", await mainKeyboard(env, db, telegramId)).catch(() => {});
+      }
+      return;
+    }
+
+    // 2. Handle callback query (button clicks)
+    if (update?.callback_query) {
+      const query = update.callback_query;
+      if (!query.id) return;
+
+      // Always acknowledge the callback query immediately to stop the button loading spinner in Telegram UI
+      callTelegram(env, "answerCallbackQuery", { callback_query_id: query.id }).catch(() => {});
+
+      const message = query.message;
+      const chatId = message?.chat?.id || query.from?.id;
+      const messageId = message?.message_id || null;
+      const telegramId = String(query.from?.id || "");
+      if (!chatId || !telegramId) return;
+
+      await upsertTelegramUser(db, query.from);
+      const data = String(query.data || "");
+      const userIsAdmin = isAdmin(env, telegramId);
+
+      let matched = false;
+
+      for (const entry of this.callbackPatterns) {
+        if (entry.matcher(data)) {
+          matched = true;
+          try {
+            if (entry.adminOnly && !userIsAdmin) {
+              await safeEditOrSend(env, chatId, messageId, "⛔ Bạn không có quyền thực hiện hành động này.", {
+                inline_keyboard: [[{ text: "🔙 Menu chính", callback_data: "menu:home" }]]
+              });
+              return;
+            }
+            return await entry.handler({
+              query,
+              message,
+              messageId,
+              chatId,
+              telegramId,
+              data,
+              env,
+              db,
+              userIsAdmin,
+              helpers
+            });
+          } catch (err) {
+            console.error(`Callback error for pattern ${entry.pattern}:`, err?.message || err);
+            await safeEditOrSend(env, chatId, messageId, `❌ Lỗi xử lý tác vụ: ${err?.message || "Không xác định"}. Vui lòng thử lại:`, await mainKeyboard(env, db, telegramId)).catch(() => {});
+            return;
+          }
+        }
+      }
+
+      // If callback data did not match any registered pattern
+      if (!matched) {
+        console.warn("Unmatched callback query data received:", data);
+        await safeEditOrSend(
+          env,
+          chatId,
+          messageId,
+          "🤖 Nút bấm hoặc phiên làm việc đã cũ. Vui lòng chọn chức năng bên dưới:",
+          await mainKeyboard(env, db, telegramId)
+        ).catch(() => {});
       }
     }
   }
