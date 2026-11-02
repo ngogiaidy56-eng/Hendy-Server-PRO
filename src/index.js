@@ -38,21 +38,42 @@ async function publishEvent(env, event) {
 }
 
 async function activateWebhook(request, env, url) {
-  if (!isBearerAuthorized(request, env.WEBHOOK_SETUP_KEY)) return json({ ok: false, error: "unauthorized" }, 401);
+  if (!isBearerAuthorized(request, env.WEBHOOK_SETUP_KEY)) {
+    return json({ ok: false, error: "unauthorized", hint: "Check WEBHOOK_SETUP_KEY and send Authorization: Bearer <key>." }, 401);
+  }
   if (!env.BOT_TOKEN || !isValidTelegramSecret(env.WEBHOOK_SECRET_TOKEN)) {
     return json({ ok: false, error: "telegram_secrets_not_configured" }, 503);
   }
-  const webhookUrl = env.TELEGRAM_WEBHOOK_URL || `${url.origin}/webhook`;
+
+  // Always derive the webhook from the host that received this authenticated request.
+  // A stale TELEGRAM_WEBHOOK_URL dashboard variable cannot redirect to an old Worker.
+  const webhookUrl = `${url.origin}/webhook`;
   try {
+    const bot = await callTelegram(env, "getMe");
+    const botIdentity = {
+      id: bot.result?.id || null,
+      username: bot.result?.username || null,
+      first_name: bot.result?.first_name || null
+    };
     const result = await callTelegram(env, "setWebhook", {
       url: webhookUrl,
       secret_token: env.WEBHOOK_SECRET_TOKEN,
       allowed_updates: ["message", "callback_query"],
       drop_pending_updates: false
     });
-    return json({ ok: true, webhookUrl, telegram: { ok: result.ok, description: result.description || "Webhook configured" } });
+    return json({
+      ok: true,
+      webhookUrl,
+      bot: botIdentity,
+      telegram: { ok: result.ok, description: result.description || "Webhook configured" }
+    });
   } catch (error) {
-    return json({ ok: false, error: "telegram_webhook_setup_failed", message: error.message }, 502);
+    console.error("Telegram webhook activation failed:", error?.message || "unknown error");
+    return json({
+      ok: false,
+      error: "telegram_webhook_setup_failed",
+      message: error.message
+    }, 502);
   }
 }
 

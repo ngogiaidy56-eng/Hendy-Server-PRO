@@ -109,21 +109,27 @@ Local testing also needs a local D1 binding and Queue configuration. Use `wrangl
 
 ## 6. Activate Telegram webhook
 
-After deploy, send an authenticated POST request from a trusted terminal:
+The webhook URL is derived from the Worker hostname receiving the authenticated activation request, so a stale `TELEGRAM_WEBHOOK_URL` environment variable cannot redirect it to an older Worker.
+
+On Windows PowerShell, run:
+
+```powershell
+.\scripts\activate-webhook.ps1
+```
+
+The script securely prompts for `WEBHOOK_SETUP_KEY`, calls the protected activation endpoint, verifies the resulting URL using `getWebhookInfo`, and prints Telegram's pending-update count and last error (without printing any secret).
+
+Alternatively, from a trusted terminal:
 
 ```bash
 curl -X POST "https://YOUR_WORKER_DOMAIN/set-webhook" \
   -H "Authorization: Bearer YOUR_WEBHOOK_SETUP_KEY"
-```
 
-Check webhook state:
-
-```bash
 curl "https://YOUR_WORKER_DOMAIN/webhook-info" \
   -H "Authorization: Bearer YOUR_WEBHOOK_SETUP_KEY"
 ```
 
-The setup key is never returned by the endpoint. Never put it into a public browser page.
+The setup key is never returned by the endpoint. Never put it into a public browser page or commit it into the repository.
 
 ## 7. Admin settings and WebSocket
 
