@@ -45,17 +45,22 @@ The command requires only `BOT_TOKEN`, `WEBHOOK_SECRET_TOKEN`, and `WEBHOOK_SETU
 
 The setup script sends secrets to Wrangler through standard input; it does not create a temporary plaintext secrets file and does not print secret values.
 
-Required secrets:
+Required for the basic Telegram bot:
 
 | Secret | Purpose |
 | --- | --- |
 | `BOT_TOKEN` | Telegram Bot API token |
-| `WEBHOOK_SECRET_TOKEN` | Telegram webhook header secret; 1–256 chars, A-Z/a-z/0-9/_/- |
+| `WEBHOOK_SECRET_TOKEN` | Telegram webhook header secret; V2 setup requires 32–256 allowed characters |
 | `WEBHOOK_SETUP_KEY` | Protects webhook activation and inspection |
+
+Optional feature secrets:
+
+| Secret | Purpose |
+| --- | --- |
 | `ADMIN_API_TOKEN` | Protects admin configuration API |
 | `SOCKET_SIGNING_SECRET` | Signs short-lived WebSocket tickets |
 | `INTERNAL_API_SECRET` | Protects internal Durable Object publish requests |
-| `CORE_BACKEND_TOKEN` | Authenticates requests to the Vietsub backend (only if enabled) |
+| `CORE_BACKEND_TOKEN` | Authenticates requests to the Vietsub backend |
 
 Set non-secret runtime variables in `wrangler.toml` or the Cloudflare dashboard:
 
