@@ -1,5 +1,5 @@
 # Copy to .dev.vars for local development. Never commit .dev.vars.
-BOT_TOKEN=
+BOT_TOKEN=8884608128:AAHV9bM8EtVqnO_S222I8IXcq2sYkDEZIyk
 WEBHOOK_SECRET_TOKEN=
 WEBHOOK_SETUP_KEY=
 ADMIN_API_TOKEN=
