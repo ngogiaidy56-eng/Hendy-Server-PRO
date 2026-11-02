@@ -59,6 +59,7 @@ Run these commands after authenticating with `npx wrangler login`:
 ```bash
 npx wrangler d1 create hendy-server-pro-db
 npx wrangler queues create hendy-server-pro-jobs
+# The hendy-server-pro-dlq dead-letter queue is created automatically by the configured consumer if absent.
 # Optional: the configured consumer creates this DLQ automatically if it does not exist.
 npx wrangler r2 bucket create hendy-server-pro-assets
 ```
@@ -156,12 +157,13 @@ The CI workflow runs syntax checks, unit tests, config checks and Wrangler dry-r
 | GET | `/webhook-info` | Protected webhook inspection |
 | GET/PATCH | `/api/admin/settings` | Admin configuration |
 | POST | `/api/admin/socket-ticket` | Short-lived WebSocket ticket |
+| POST | `/api/internal/vietsub/callback` | Authenticated Core Backend job status callback |
 | GET | `/ws?ticket=...` | WebSocket endpoint |
 
 ## Important integration boundaries
 
 - A D1 wallet table is provisioned, but V2 does not credit a wallet from an unauthenticated request. Payment provider details and signature format must be supplied before payment automation is enabled.
-- The Vietsub queue expects a backend endpoint at `POST /api/v1/vietsub/jobs`. Define its request/response contract and callback authentication before marking a video job completed.
+- The Vietsub queue submits jobs to `POST /api/v1/vietsub/jobs`. The backend reports progress/result to `POST /api/internal/vietsub/callback` using `Authorization: Bearer CORE_BACKEND_TOKEN` and a JSON object containing `jobId`, `status` (`processing`, `completed`, or `failed`), plus optional `progress`, `externalJobId`, `errorCode`, and HTTPS `outputUrl`.
 - R2 is provisioned for media assets; signed upload/download policies and retention rules should be defined before accepting user media.
 - Social-media engagement providers are not configured. V2 does not claim that a service ran or deduct user balance for a simulated service.
 
