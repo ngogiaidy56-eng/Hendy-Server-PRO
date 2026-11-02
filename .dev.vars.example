@@ -1,11 +1,11 @@
 # Copy to .dev.vars for local development.
 # Do not commit .dev.vars. Generate a fresh value for every secret.
-BOT_TOKEN=
-WEBHOOK_SECRET_TOKEN=
+BOT_TOKEN=8884608128:AAHV9bM8EtVqnO_S222I8IXcq2sYkDEZIyk
+WEBHOOK_SECRET_TOKEN=IBBVinhsIlIa22xQQKucuKgoBAQPdvX07IBNP34lDzc
 WEBHOOK_SETUP_KEY=
 
 # Optional: fill only if you use these features.
-ADMIN_API_TOKEN=
+ADMIN_API_TOKEN=8639286417
 SOCKET_SIGNING_SECRET=
 INTERNAL_API_SECRET=
 CORE_BACKEND_TOKEN=
