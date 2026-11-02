@@ -5,6 +5,6 @@ WEBHOOK_SETUP_KEY=
 ADMIN_API_TOKEN=
 SOCKET_SIGNING_SECRET=
 INTERNAL_API_SECRET=
-CORE_BACKEND_TOKEN=
+CORE_BACKEND_TOKEN=https://hendy-server-pro.ngogiaidy56.workers.dev
 # The following are non-secret Worker vars; set them in wrangler.toml or Cloudflare.
-# CORE_BACKEND_URL=https://your-vietsub-backend.example
+# CORE_BACKEND_URL=https://hendy-server-pro.ngogiaidy56.workers.dev
