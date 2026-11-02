@@ -3,6 +3,7 @@ import {
   claimWebhookUpdate,
   finishWebhookUpdate,
   getSetting,
+  getVideoJob,
   requireDatabase,
   setSetting,
   updateVideoJob
@@ -141,6 +142,65 @@ async function adminSettings(request, env) {
   return json({ ok: true, updated: entries.map(([key]) => key) });
 }
 
+async function vietsubCallback(request, env) {
+  if (!isBearerAuthorized(request, env.CORE_BACKEND_TOKEN)) {
+    return json({ ok: false, error: "unauthorized" }, 401);
+  }
+  const db = requireDatabase(env);
+  let body;
+  try { body = parseJsonObject(await request.text(), 8192); }
+  catch { return json({ ok: false, error: "invalid_payload" }, 400); }
+
+  const jobId = typeof body.jobId === "string" ? body.jobId : "";
+  const allowedStatuses = ["processing", "completed", "failed"];
+  if (!jobId || !allowedStatuses.includes(body.status)) {
+    return json({ ok: false, error: "invalid_job_update" }, 400);
+  }
+  const job = await getVideoJob(db, jobId);
+  if (!job) return json({ ok: false, error: "job_not_found" }, 404);
+
+  const progress = Number.isInteger(body.progress)
+    ? Math.max(0, Math.min(100, body.progress))
+    : (body.status === "completed" ? 100 : Number(job.progress || 0));
+  const outputUrl = typeof body.outputUrl === "string" ? body.outputUrl : "";
+  if (outputUrl) {
+    try {
+      const parsed = new URL(outputUrl);
+      if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
+        return json({ ok: false, error: "invalid_output_url" }, 400);
+      }
+    } catch {
+      return json({ ok: false, error: "invalid_output_url" }, 400);
+    }
+  }
+
+  await updateVideoJob(db, jobId, {
+    status: body.status,
+    externalJobId: typeof body.externalJobId === "string" ? body.externalJobId : null,
+    progress,
+    errorCode: body.status === "failed" ? String(body.errorCode || "VIETSUB_FAILED").slice(0, 100) : null
+  });
+  await publishEvent(env, {
+    type: "vietsub.updated",
+    jobId,
+    status: body.status,
+    progress,
+    outputUrl: outputUrl || undefined
+  });
+
+  if (body.status === "completed" || body.status === "failed") {
+    const notification = body.status === "completed"
+      ? `✅ Vietsub đã hoàn tất. Mã công việc: ${jobId}${outputUrl ? "\\nKết quả: " + outputUrl : ""}`
+      : `❌ Vietsub thất bại. Mã công việc: ${jobId}. Mã lỗi: ${String(body.errorCode || "VIETSUB_FAILED").slice(0, 80)}`;
+    try {
+      await callTelegram(env, "sendMessage", { chat_id: job.telegram_id, text: notification, disable_web_page_preview: true });
+    } catch (error) {
+      console.error("Vietsub notification failed:", error?.message || "unknown error");
+    }
+  }
+  return json({ ok: true, jobId, status: body.status, progress });
+}
+
 async function socketTicket(request, env) {
   if (!adminAuthorized(request, env)) return json({ ok: false, error: "unauthorized" }, 401);
   if (!env.SOCKET_SIGNING_SECRET) return json({ ok: false, error: "socket_signing_secret_not_configured" }, 503);
@@ -228,6 +288,9 @@ export default {
       }
       if (url.pathname === "/webhook-info" && request.method === "GET") {
         return await webhookInfo(request, env);
+      }
+      if (url.pathname === "/api/internal/vietsub/callback" && request.method === "POST") {
+        return await vietsubCallback(request, env);
       }
       if (url.pathname === "/api/admin/settings") {
         return await adminSettings(request, env);
