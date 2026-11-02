@@ -6,9 +6,9 @@ WEBHOOK_SETUP_KEY=
 
 # Optional: fill only if you use these features.
 ADMIN_API_TOKEN=8639286417
-SOCKET_SIGNING_SECRET=
+SOCKET_SIGNING_SECRET=hendy-server-pro_BotSocket
 INTERNAL_API_SECRET=
-CORE_BACKEND_TOKEN=
+CORE_BACKEND_TOKEN=https://hendy-server-pro.pages.dev
 
 # Optional HTTPS URL override. Leave blank to use the current Worker hostname.
 TELEGRAM_WEBHOOK_URL=
