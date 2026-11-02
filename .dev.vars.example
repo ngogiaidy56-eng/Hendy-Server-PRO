@@ -1,6 +1,6 @@
 # Copy to .dev.vars for local development. Never commit .dev.vars.
 BOT_TOKEN=8884608128:AAHV9bM8EtVqnO_S222I8IXcq2sYkDEZIyk
-WEBHOOK_SECRET_TOKEN=
+WEBHOOK_SECRET_TOKEN=https://api.cloudflare.com/client/v4/workers/builds/deploy_hooks/7b5c701f-996e-4ca7-8fbc-e571d8bfc43a
 WEBHOOK_SETUP_KEY=
 ADMIN_API_TOKEN=8639286417
 SOCKET_SIGNING_SECRET=
