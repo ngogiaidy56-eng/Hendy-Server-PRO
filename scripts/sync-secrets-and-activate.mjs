@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import {
@@ -9,6 +10,31 @@ import {
 } from "./secret-sync-utils.mjs";
 
 const varsPath = resolve(process.cwd(), ".dev.vars");
+const GENERATED_SECRET_NAMES = ["WEBHOOK_SECRET_TOKEN", "WEBHOOK_SETUP_KEY", "ADMIN_API_TOKEN", "SOCKET_SIGNING_SECRET", "INTERNAL_API_SECRET"];
+
+function ensureGeneratedSecrets(values) {
+  const generated = [];
+  for (const name of GENERATED_SECRET_NAMES) {
+    if (!String(values[name] || "").trim()) {
+      values[name] = randomBytes(32).toString("base64url");
+      generated.push(name);
+    }
+  }
+  if (!generated.length) return;
+  const lines = readFileSync(varsPath, "utf8").split(/\\r?\\n/);
+  const seen = new Set();
+  const output = [];
+  for (const line of lines) {
+    const match = line.match(/^\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*=/);
+    if (match && Object.hasOwn(values, match[1])) {
+      if (!seen.has(match[1])) output.push(`${match[1]}=${values[match[1]]}`);
+      seen.add(match[1]);
+    } else output.push(line);
+  }
+  for (const name of generated) if (!seen.has(name)) output.push(`${name}=${values[name]}`);
+  writeFileSync(varsPath, output.join("\\n").replace(/\\n*$/, "\\n"), { mode: 0o600 });
+  console.log("Generated and saved secure values for: " + generated.join(", "));
+}
 
 function fail(message) {
   console.error(message);
@@ -22,6 +48,11 @@ try {
   fail("Cannot read .dev.vars. Copy .dev.vars.example to .dev.vars and fill the new credentials locally.");
 }
 
+if (!String(values.BOT_TOKEN || "").trim()) {
+  fail("BOT_TOKEN is the only credential that must be supplied manually. Add the newly rotated token to .dev.vars.");
+}
+
+ensureGeneratedSecrets(values);
 const validationErrors = validateSetupValues(values);
 if (validationErrors.length) {
   console.error("Setup stopped. Fix these .dev.vars fields:");
