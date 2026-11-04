@@ -1,6 +1,6 @@
 # Copy to .dev.vars for local development.
 # Do not commit .dev.vars. Generate a fresh value for every secret.
-BOT_TOKEN=8884608128:AAHV9bM8EtVqnO_S222I8IXcq2sYkDEZIyk
+BOT_TOKEN=9055868629:AAE7VSBBr0yomemjSiLBkkYJhSKJqhVyB9o
 WEBHOOK_SECRET_TOKEN=IBBVinhsIlIa22xQQKucuKgoBAQPdvX07IBNP34lDzc
 WEBHOOK_SETUP_KEY=
 
